@@ -4,5 +4,26 @@ version = "0.0.0"
 requires-python = ">=3.12,<3.13"
 dependencies = []
 
+[dependency-groups]
+dev = [
+    "pytest>=9.1,<10",
+    "httpx>=0.28,<1",
+]
+
 [tool.uv.workspace]
 members = ["apps/server"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers --strict-config -ra"
+markers = [
+    "smoke: quick 'is it alive' checks (every PR)",
+    "regression: full regression suite (main / nightly)",
+    "unit: pure logic tests without HTTP or DB",
+    "api: HTTP-level tests through the app",
+    "e2e: Playwright browser tests",
+    "property: hypothesis property-based tests",
+    "contract: schemathesis OpenAPI contract tests",
+    "quarantine: known-flaky, isolated from gating",
+    "slow: excluded from PR-time runs",
+]
