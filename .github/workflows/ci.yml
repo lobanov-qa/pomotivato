@@ -1,0 +1,85 @@
+# E0 pipeline: fast checks that gate every PR (spec: plan §6.4 "до E5a урезанный").
+# Full regression/Allure/mutation layers arrive with E5a.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A new push to the same branch cancels the older in-flight run (CI budget).
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-python:
+    name: Lint & types (ruff, mypy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      # Full semver pinned on purpose: the repo has no floating `v10` major
+      # tag (release v10.0.1 exists, `v10` ref does not — CI failed on it).
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          uv-version: "0.10.1"
+          enable-cache: true
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --all-packages --frozen
+      - name: Ruff lint
+        run: uv run ruff check apps/server/src tests
+      - name: Ruff format check
+        run: uv run ruff format --check apps/server/src tests
+      - name: Mypy (strict)
+        run: uv run mypy apps/server/src tests
+
+  test-python:
+    name: Tests (pytest floor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          uv-version: "0.10.1"
+          enable-cache: true
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --all-packages --frozen
+      - name: Unit + API floor
+        run: uv run pytest -q -m "unit or api"
+
+  web:
+    name: Frontend (lint, types, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: apps/web/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: ESLint
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Build
+        run: pnpm build
