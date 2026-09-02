@@ -16,10 +16,13 @@ dev = [
 [tool.uv.workspace]
 members = ["apps/server"]
 
-# Tool configs live at the workspace root on purpose: ruff and mypy resolve
-# their configuration from the invocation directory (repo root), NOT from
-# the pyproject.toml nearest to each checked file. Putting [tool.*] into
-# apps/server would silently downgrade both tools to defaults in CI.
+# Tool configs live at the workspace root deliberately:
+# - ruff walks up from EACH checked file to the nearest pyproject.toml with
+#   [tool.ruff]; member pyprojects (apps/server) must NOT define [tool.ruff],
+#   or they would shadow the root one for their subtree;
+# - mypy takes exactly ONE config file, resolved from the invocation
+#   directory (repo root) — a [tool.mypy] in apps/server would be ignored
+#   when mypy is run from root (verified 2026-09-02 by probe experiment).
 [tool.ruff]
 line-length = 100
 target-version = "py312"
