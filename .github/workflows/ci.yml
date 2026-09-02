@@ -22,7 +22,9 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      # Full semver pinned on purpose: the repo has no floating `v10` major
+      # tag (release v10.0.1 exists, `v10` ref does not — CI failed on it).
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           uv-version: "0.10.1"
           enable-cache: true
@@ -44,7 +46,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           uv-version: "0.10.1"
           enable-cache: true
