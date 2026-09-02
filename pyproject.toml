@@ -8,6 +8,9 @@ dependencies = []
 dev = [
     "pytest>=9.1,<10",
     "httpx>=0.28,<1",
+    "ruff>=0.16,<1",
+    "mypy>=2.3,<3",
+    "pre-commit>=4.6,<5",
 ]
 
 [tool.uv.workspace]
