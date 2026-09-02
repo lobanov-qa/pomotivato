@@ -15,3 +15,33 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pomotivato"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["apps/server/src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes: unused imports/variables, undefined names
+    "I",   # isort: import order
+    "B",   # bugbear: likely bugs (loop variable capture, raise from, ...)
+    "UP",  # pyupgrade: modern syntax for the pinned Python
+    "SIM", # simplify
+    "C4",  # comprehensions
+    "PTH", # prefer pathlib
+    "RET", # return-code hygiene
+]
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "apps/server/src"
+strict = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+# test functions are untyped by pytest convention
+disallow_untyped_defs = false
