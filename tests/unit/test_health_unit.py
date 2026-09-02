@@ -1,6 +1,7 @@
 """Unit tests for pure functions callable without the HTTP layer."""
 
 import pytest
+
 from pomotivato.main import health
 
 

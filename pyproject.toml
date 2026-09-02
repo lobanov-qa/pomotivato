@@ -16,6 +16,43 @@ dev = [
 [tool.uv.workspace]
 members = ["apps/server"]
 
+# Tool configs live at the workspace root deliberately:
+# - ruff walks up from EACH checked file to the nearest pyproject.toml with
+#   [tool.ruff]; member pyprojects (apps/server) must NOT define [tool.ruff],
+#   or they would shadow the root one for their subtree;
+# - mypy takes exactly ONE config file, resolved from the invocation
+#   directory (repo root) — a [tool.mypy] in apps/server would be ignored
+#   when mypy is run from root (verified 2026-09-02 by probe experiment).
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["apps/server/src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes: unused imports/variables, undefined names
+    "I",   # isort: import order
+    "B",   # bugbear: likely bugs (loop variable capture, raise from, ...)
+    "UP",  # pyupgrade: modern syntax for the pinned Python
+    "SIM", # simplify
+    "C4",  # comprehensions
+    "PTH", # prefer pathlib
+    "RET", # return-code hygiene
+]
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "apps/server/src"
+strict = true
+warn_unreachable = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+# test functions are untyped by pytest convention
+disallow_untyped_defs = false
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers --strict-config -ra"
