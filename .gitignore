@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Build artifacts (PyInstaller, Vite)
+build/
+dist/
+
+# Test reports
+allure-results/
+allure-report/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local data
+*.db
+*.db-wal
+*.db-shm
