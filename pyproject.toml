@@ -11,6 +11,7 @@ dev = [
     "ruff>=0.16,<1",
     "mypy>=2.3,<3",
     "pre-commit>=4.6,<5",
+    "hypothesis>=6.132,<7",
 ]
 
 [tool.uv.workspace]
