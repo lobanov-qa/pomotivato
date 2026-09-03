@@ -38,3 +38,11 @@ class StatusTransitionError(ValidationError):
 
 class ScienceFieldRequiredError(ValidationError):
     """V8 when_then required when settings demand science fields."""
+
+
+class InvalidTransitionError(ValidationError):
+    """FSM command not allowed in current state (spec 01 T18..T23, I4)."""
+
+
+class InvalidReviewError(ValidationError):
+    """Review refused: segment not reviewable or already reviewed (T17)."""

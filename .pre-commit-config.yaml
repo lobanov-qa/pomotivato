@@ -29,6 +29,7 @@ repos:
           - fastapi>=0.141
           - pydantic>=2.13
           - pytest>=9.1
+          - hypothesis>=6.132,<7
         files: ^(apps/server/src|tests)/
 
   - repo: local
