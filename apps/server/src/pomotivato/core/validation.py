@@ -1,9 +1,7 @@
-"""Validation rules for core models (spec 01 §7, V1..V11 minus V6).
+"""Validation rules for core models (spec 01 §7, V1..V11).
 
-V6 (deadline realism) depends on recommended_start from core.science and
-ships with the e1-science PR; everything else the core can check without
-time travel lives here. Each rule raises a spec-01 error subclass so the
-UI layer can branch without parsing messages.
+Each rule raises a spec-01 error subclass so the UI layer can branch on
+error kind instead of parsing messages.
 """
 
 from __future__ import annotations
@@ -31,6 +29,7 @@ from pomotivato.core.models import (
     WeeklyCount,
     WeeklyDays,
 )
+from pomotivato.core.science import recommended_start
 
 TITLE_MAX_LEN = 200
 _MINUTES_RANGE = range(1, 241)
@@ -149,3 +148,22 @@ def validate_planning_ready(task: Task, require_science_fields: bool) -> None:
     if require_science_fields and not (task.when_then or "").strip():
         msg = f"task {task.id!r} needs when_then to enter planning"
         raise ScienceFieldRequiredError(msg)
+
+
+def validate_deadline_realism(task: Task) -> None:
+    """V6: a deadline task must have enough runway (spec 01 §6.2/P3 link).
+
+    recommended_start must not be earlier than creation day: if it is,
+    the plan no longer fits and the user hears it at planning time, not
+    at the missed deadline. Tasks without a deadline always pass.
+    """
+    if task.deadline is None:
+        return
+    start = recommended_start(task.deadline, task.estimate_blocks)
+    if start < task.created_at.date():
+        msg = (
+            f"deadline {task.deadline} is unrealistic: {task.estimate_blocks} "
+            f"blocks fit no earlier than {start}, task created "
+            f"{task.created_at.date()}"
+        )
+        raise TaskValidationError(msg)
