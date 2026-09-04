@@ -66,7 +66,9 @@ jobs:
   web:
     name: Frontend (lint, types, build)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Cold pnpm-download easily exceeds 5 min (observed 4m29s + two flakes
+    # on the action-setup step); 10 is a headroom ceiling, not expected time.
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: apps/web

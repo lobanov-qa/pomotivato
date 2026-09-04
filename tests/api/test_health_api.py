@@ -13,7 +13,7 @@ def test_health_endpoint_returns_ok_when_server_runs(client):
 
 
 @pytest.mark.api
-@pytest.mark.parametrize("path", ["/nope", "/api/tasks", "/healthz"])
+@pytest.mark.parametrize("path", ["/nope", "/api/sessions", "/healthz"])
 def test_unknown_route_returns_404_when_path_not_registered(client, path):
     response = client.get(path)
 

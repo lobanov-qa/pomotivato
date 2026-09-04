@@ -52,6 +52,9 @@ class TaskService:
     async def create(self, task: Task) -> Task:
         validate_task(task)
         validate_deadline_realism(task)
+        if await self._tasks.get(task.id) is not None:
+            msg = f"task {task.id!r} already exists"
+            raise ConflictError(msg)
         parent = task.parent_id
         if parent is not None and await self._tasks.get(parent) is None:
             msg = f"parent task {parent!r} does not exist"
