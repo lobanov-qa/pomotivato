@@ -1,4 +1,4 @@
-"""Request-scoped dependencies: one database transaction per request."""
+"""Request-scoped dependencies: one DB transaction + shared per-process deps."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pomotivato.core.clock import Clock
+from pomotivato.services.session_service import FsmRegistry
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
@@ -27,3 +28,12 @@ def get_clock(request: Request) -> Clock:
 
 
 ClockDep = Annotated[Clock, Depends(get_clock)]
+
+
+def get_registry(request: Request) -> FsmRegistry:
+    """Live FSM registry shared by all requests of one server process."""
+    registry: FsmRegistry = request.app.state.fsm_registry
+    return registry
+
+
+RegistryDep = Annotated[FsmRegistry, Depends(get_registry)]

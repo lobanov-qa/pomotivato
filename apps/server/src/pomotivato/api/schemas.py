@@ -13,6 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from pomotivato.core.models import (
     DayPlan,
+    Review,
+    Segment,
     SessionSettings,
     Slot,
     Task,
@@ -22,6 +24,7 @@ from pomotivato.core.models import (
     recurrence_to_dict,
     to_dict,
 )
+from pomotivato.services.session_service import SessionView
 
 
 class RecurrenceDto(BaseModel):
@@ -150,6 +153,78 @@ class MoveSlotDto(BaseModel):
 
 class SetStatusDto(BaseModel):
     to: TaskStatus
+
+
+class SessionCreateDto(BaseModel):
+    day_plan_id: str
+    settings: SessionSettingsDto | None = None
+
+
+class SegmentDto(BaseModel):
+    id: str
+    session_id: str
+    phase: str
+    planned_min: int
+    task_id: str | None
+    started_at: str | None
+    ended_at: str | None
+    status: str | None
+
+    @classmethod
+    def from_core(cls, segment: Segment) -> SegmentDto:
+        return cls(**to_dict(segment))
+
+
+class ReviewDto(BaseModel):
+    segment_id: str
+    score: int
+    comment: str | None = None
+    recall_notes: str | None = None
+    reward: str | None = None
+
+    @classmethod
+    def from_core(cls, review: Review) -> ReviewDto:
+        return cls(**to_dict(review))
+
+
+class ReviewCreateDto(BaseModel):
+    segment_id: str
+    score: int
+    comment: str | None = None
+
+
+class SessionDto(BaseModel):
+    """View of one session: FSM state + timeline + reviews (spec 02 §5 GET)."""
+
+    id: str
+    day_plan_id: str
+    state: str
+    started_at: str | None
+    stop_reason: str | None
+    phase: str | None
+    remaining_sec: int
+    phase_ends_at: str | None
+    average_score: float | None
+    settings: SessionSettingsDto
+    timeline: list[SegmentDto]
+    reviews: list[ReviewDto]
+
+    @classmethod
+    def from_view(cls, view: SessionView) -> SessionDto:
+        return cls(
+            id=view.session.id,
+            day_plan_id=view.session.day_plan_id,
+            state=view.session.state.value,
+            started_at=view.session.started_at.isoformat() if view.session.started_at else None,
+            stop_reason=view.session.stop_reason,
+            phase=view.phase,
+            remaining_sec=view.remaining_sec,
+            phase_ends_at=view.ends_at.isoformat() if view.ends_at else None,
+            average_score=view.average_score,
+            settings=SessionSettingsDto.from_core(view.session.settings),
+            timeline=[SegmentDto.from_core(seg) for seg in view.timeline],
+            reviews=[ReviewDto.from_core(review) for review in view.reviews],
+        )
 
 
 class SessionSettingsDto(BaseModel):
