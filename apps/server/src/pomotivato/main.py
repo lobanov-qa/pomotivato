@@ -15,6 +15,9 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from pomotivato.api.errors import register_error_handlers
+from pomotivato.api.routers import day_plans, settings, tasks
+from pomotivato.core.clock import SystemClock
 from pomotivato.infra.db import Database, default_db_path
 from pomotivato.infra.migrations import migrate
 
@@ -45,6 +48,11 @@ def create_app(db_path: Path | None = None) -> FastAPI:
         lifespan=_lifespan,
     )
     app.state.db = Database(db_path if db_path is not None else default_db_path())
+    app.state.clock = SystemClock()
+    register_error_handlers(app)
+    app.include_router(tasks.router)
+    app.include_router(day_plans.router)
+    app.include_router(settings.router)
     app.get("/health")(health)
 
     # One process serves UI + API: if the frontend has been built next to
