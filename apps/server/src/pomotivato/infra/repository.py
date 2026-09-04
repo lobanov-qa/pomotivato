@@ -149,6 +149,10 @@ class DayPlanRepository:
         row = await self._session.scalar(stmt)
         return None if row is None else _plan_from_row(row)
 
+    async def get(self, plan_id: str) -> DayPlan | None:
+        row = await self._session.get(DayPlanRow, plan_id)
+        return None if row is None else _plan_from_row(row)
+
     async def dates_referencing(self, task_id: str) -> tuple[date, ...]:
         """Dates whose plan still places this task in a slot.
 
