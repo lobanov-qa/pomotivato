@@ -30,6 +30,8 @@ repos:
           - pydantic>=2.13
           - pytest>=9.1
           - hypothesis>=6.132,<7
+          - sqlalchemy>=2.0,<3
+          - alembic>=1.13,<2
         files: ^(apps/server/src|tests)/
 
   - repo: local
