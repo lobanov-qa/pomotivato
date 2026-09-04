@@ -1,0 +1,55 @@
+# E2 smoke packaging (spec 02 §9, master §6.4): prove PyInstaller paths and
+# hidden imports early. Trigger is manual by author decision Q7 — push-to-main
+# turns on at E3 when alpha builds become the dogfooding channel.
+name: Build alpha
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write  # upload to the floating alpha-latest pre-release
+
+jobs:
+  linux:
+    name: Linux binary smoke (PyInstaller)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: "0.10.1"
+          enable-cache: true
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --all-packages --frozen
+      - name: Build one-file binary
+        run: uv run pyinstaller packaging/server.spec --distpath dist --noconfirm
+      - name: Smoke boot, health poll and settings read
+        run: |
+          POMOTIVATO_DB=/tmp/alpha.db POMOTIVATO_PORT=8787 ./dist/pomotivato-server &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          ok=""
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8787/health; then ok=yes; break; fi
+            sleep 1
+          done
+          test -n "$ok" || { echo "health never came up"; exit 1; }
+          curl -sf http://127.0.0.1:8787/api/settings | grep -q work_min
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pomotivato-server-linux
+          path: dist/pomotivato-server
+          retention-days: 14
+      - name: Attach to floating alpha-latest pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: alpha-latest
+          name: alpha-latest (floating)
+          prerelease: true
+          files: dist/pomotivato-server
+          make_latest: "false"

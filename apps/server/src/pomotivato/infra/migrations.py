@@ -9,6 +9,7 @@ connection — WAL readers are unaffected (SQLite file-level journal).
 from __future__ import annotations
 
 import asyncio
+import sys
 from pathlib import Path
 
 from alembic import command
@@ -17,7 +18,22 @@ from alembic.config import Config
 import pomotivato
 from pomotivato.infra.db import sync_url
 
-SERVER_ROOT = Path(pomotivato.__file__).resolve().parents[2]
+
+def _bundle_root() -> Path:
+    """apps/server in a source checkout; the PyInstaller bundle when frozen.
+
+    onefile sets sys._MEIPASS to the extraction dir, where server.spec has
+    placed alembic/ and alembic.ini — __file__-relative math is wrong there.
+    """
+    if getattr(sys, "frozen", False):
+        # _MEIPASS is injected by PyInstaller at runtime only; plain
+        # attribute access would break static analysis of normal CPython.
+        meipass: str = getattr(sys, "_MEIPASS")  # noqa: B009
+        return Path(meipass)
+    return Path(pomotivato.__file__).resolve().parents[2]
+
+
+SERVER_ROOT = _bundle_root()
 INI_PATH = SERVER_ROOT / "alembic.ini"
 SCRIPT_LOCATION = SERVER_ROOT / "alembic"
 

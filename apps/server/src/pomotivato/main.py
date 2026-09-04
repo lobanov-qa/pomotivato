@@ -8,6 +8,7 @@ the next PRs of the E2 chain.
 
 from __future__ import annotations
 
+import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -23,7 +24,17 @@ from pomotivato.infra.migrations import migrate
 from pomotivato.infra.repository_sessions import finalize_orphan_sessions
 from pomotivato.services.session_service import FsmRegistry
 
-WEB_DIST = Path(__file__).resolve().parents[3] / "web" / "dist"
+
+def _assets_root() -> Path:
+    """Repo root near the package; bundle root when frozen (see migrations)."""
+    if getattr(sys, "frozen", False):
+        # _MEIPASS exists only inside a PyInstaller bundle.
+        meipass: str = getattr(sys, "_MEIPASS")  # noqa: B009
+        return Path(meipass)
+    return Path(__file__).resolve().parents[3]
+
+
+WEB_DIST = _assets_root() / "web" / "dist"
 
 
 def health() -> dict[str, str]:
