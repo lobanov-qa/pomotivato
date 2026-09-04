@@ -62,6 +62,10 @@ def _set_sqlite_pragmas(dbapi_connection: object, _record: object) -> None:
     cursor = dbapi_connection.cursor()  # type: ignore[attr-defined]
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA foreign_keys=ON")
+    # SQLite defaults to failing instantly when another connection is
+    # writing; a desktop app (and the restart test) has overlapping short
+    # transactions, so wait up to 5 s instead of raising "database is locked".
+    cursor.execute("PRAGMA busy_timeout=5000")
     cursor.close()
 
 
