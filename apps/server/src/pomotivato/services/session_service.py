@@ -21,6 +21,7 @@ from pomotivato.core.models import (
     Segment,
     Session,
     SessionSettings,
+    SessionState,
 )
 from pomotivato.infra.errors import ConflictError, NotFoundError
 from pomotivato.infra.repository_sessions import (
@@ -57,6 +58,13 @@ class FsmRegistry:
 
     def drop(self, session_id: str) -> None:
         self._by_id.pop(session_id, None)
+
+    def latest_active(self) -> str | None:
+        """Most recently started still-live session id (spec 03 /api/status)."""
+        for fsm in reversed(list(self._by_id.values())):
+            if fsm.state in (SessionState.RUNNING, SessionState.PAUSED):
+                return fsm.session.id
+        return None
 
 
 class SessionService:

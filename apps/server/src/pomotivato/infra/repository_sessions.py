@@ -51,6 +51,16 @@ class SessionRepository:
         row = await self._session.get(SessionRow, session_id)
         if row is None:
             return None
+        return self._from_row(row)
+
+    async def get_many_for_plan(self, day_plan_id: str) -> tuple[Session, ...]:
+        """All sessions ever started on one day plan (summary reads them)."""
+        stmt = select(SessionRow).where(SessionRow.day_plan_id == day_plan_id)
+        rows = list(await self._session.scalars(stmt))
+        return tuple(self._from_row(row) for row in rows)
+
+    @staticmethod
+    def _from_row(row: SessionRow) -> Session:
         return session_from_dict(
             {
                 "id": row.id,
