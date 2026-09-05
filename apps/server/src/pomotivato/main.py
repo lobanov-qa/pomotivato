@@ -17,7 +17,15 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from pomotivato.api.errors import register_error_handlers
-from pomotivato.api.routers import day_plans, reviews, sessions, settings, status, tasks
+from pomotivato.api.routers import (
+    day_plans,
+    reviews,
+    session_events,
+    sessions,
+    settings,
+    status,
+    tasks,
+)
 from pomotivato.core.clock import SystemClock
 from pomotivato.infra.db import Database, default_db_path
 from pomotivato.infra.migrations import migrate
@@ -70,6 +78,7 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     app.include_router(day_plans.router)
     app.include_router(settings.router)
     app.include_router(sessions.router)
+    app.include_router(session_events.router)
     app.include_router(reviews.router)
     app.include_router(status.status_router)
     app.include_router(status.summary_router)

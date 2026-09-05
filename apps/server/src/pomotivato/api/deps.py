@@ -9,6 +9,7 @@ from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pomotivato.core.clock import Clock
+from pomotivato.infra.db import Database
 from pomotivato.services.session_service import FsmRegistry
 
 
@@ -37,3 +38,12 @@ def get_registry(request: Request) -> FsmRegistry:
 
 
 RegistryDep = Annotated[FsmRegistry, Depends(get_registry)]
+
+
+def get_database(request: Request) -> Database:
+    """The one Database per process; SSE generators open own sessions."""
+    db: Database = request.app.state.db
+    return db
+
+
+DatabaseDep = Annotated[Database, Depends(get_database)]
