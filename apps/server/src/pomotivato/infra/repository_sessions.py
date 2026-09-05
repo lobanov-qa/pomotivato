@@ -16,7 +16,6 @@ from pomotivato.core.models import (
     RepetitionState,
     Review,
     Segment,
-    SegmentStatus,
     Session,
     SessionState,
     repetition_state_from_dict,
@@ -44,6 +43,12 @@ class SessionRepository:
                 started_at=_iso(session_model.started_at),
                 settings_json=json.dumps(to_dict(session_model.settings)),
                 stop_reason=session_model.stop_reason,
+                slots_json=(
+                    None
+                    if session_model.slots is None
+                    else json.dumps([to_dict(slot) for slot in session_model.slots])
+                ),
+                pause_started_at=_iso(session_model.pause_started_at),
             )
         )
 
@@ -59,6 +64,21 @@ class SessionRepository:
         rows = list(await self._session.scalars(stmt))
         return tuple(self._from_row(row) for row in rows)
 
+    async def list_live(self) -> tuple[Session, ...]:
+        """Rows still marked running/paused — the restore/sweep candidates."""
+        stmt = select(SessionRow).where(
+            SessionRow.state.in_([SessionState.RUNNING.value, SessionState.PAUSED.value])
+        )
+        rows = list(await self._session.scalars(stmt))
+        return tuple(self._from_row(row) for row in rows)
+
+    async def mark_stopped(self, session_id: str, reason: str = "server_restart") -> None:
+        """Q4 legacy path: force a live row to stopped without touching FSM."""
+        row = await self._session.get(SessionRow, session_id)
+        if row is not None:
+            row.state = SessionState.STOPPED.value
+            row.stop_reason = reason
+
     @staticmethod
     def _from_row(row: SessionRow) -> Session:
         return session_from_dict(
@@ -69,6 +89,8 @@ class SessionRepository:
                 "settings": json.loads(row.settings_json),
                 "started_at": row.started_at,
                 "stop_reason": row.stop_reason,
+                "slots": json.loads(row.slots_json) if row.slots_json else None,
+                "pause_started_at": row.pause_started_at,
             }
         )
 
@@ -93,6 +115,7 @@ class SegmentRepository:
                 "started_at": row.started_at,
                 "ended_at": row.ended_at,
                 "status": row.status,
+                "paused_sec": row.paused_sec,
             }
         )
 
@@ -108,6 +131,7 @@ class SegmentRepository:
                     started_at=_iso(segment.started_at),
                     ended_at=_iso(segment.ended_at),
                     status=segment.status.value if segment.status else None,
+                    paused_sec=segment.paused_sec,
                 )
             )
 
@@ -129,6 +153,7 @@ class SegmentRepository:
                     "started_at": row.started_at,
                     "ended_at": row.ended_at,
                     "status": row.status,
+                    "paused_sec": row.paused_sec,
                 }
             )
             for row in rows
@@ -204,25 +229,3 @@ class RepetitionRepository:
                 next_due=data["next_due"],
             )
         )
-
-
-async def finalize_orphan_sessions(session: AsyncSession) -> int:
-    """Q4 spec 02: live rows left by a restart become stopped/interrupted.
-
-    Returns the number of swept sessions; the honest recovery (rehydrating
-    the FSM from persisted segments) is part of E3 clock work.
-    """
-    stmt = select(SessionRow).where(
-        SessionRow.state.in_([SessionState.RUNNING.value, SessionState.PAUSED.value])
-    )
-    rows = list(await session.scalars(stmt))
-    for row in rows:
-        row.state = SessionState.STOPPED.value
-        row.stop_reason = "server_restart"
-        open_stmt = select(SegmentRow).where(
-            SegmentRow.session_id == row.id,
-            SegmentRow.status.is_(None),
-        )
-        for segment in await session.scalars(open_stmt):
-            segment.status = SegmentStatus.INTERRUPTED.value
-    return len(rows)

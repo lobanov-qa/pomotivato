@@ -8,17 +8,19 @@ rows to stopped/interrupted (Q4). Rehydrating a running FSM is E3 work.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pomotivato.core.clock import Clock
+from pomotivato.core.errors import DayPlanValidationError, InvalidTransitionError
 from pomotivato.core.fsm import SessionFSM
 from pomotivato.core.models import (
     DayPlan,
     Review,
     Segment,
+    SegmentStatus,
     Session,
     SessionSettings,
     SessionState,
@@ -163,3 +165,35 @@ class SessionService:
             reviews=fsm.reviews,
             average_score=fsm.average_score,
         )
+
+    async def restore_or_sweep(self) -> tuple[int, int]:
+        """Rehydrate live rows into the registry; sweep what cannot be saved.
+
+        Spec 03 §6 replaces the E2 Q4 auto-stop for the app lifespan:
+        rows carrying a slot snapshot rebuild a real SessionFSM (the timer
+        survives a restart — overdue deadlines are honest, advance()
+        catches them up), while legacy/corrupt rows follow the old path:
+        stopped + interrupted open segments. Returns (restored, swept).
+        """
+        live = await self._sessions.list_live()
+        restored = 0
+        swept = 0
+        for stored in live:
+            timeline = await self._segments.get_many_for_session(stored.id)
+            reviews = await self._reviews.get_many_for_session(stored.id)
+            try:
+                fsm = SessionFSM.restore(self._clock, stored, timeline, reviews)
+            except (InvalidTransitionError, DayPlanValidationError):
+                await self._sessions.mark_stopped(stored.id)
+                open_segments = tuple(
+                    replace(seg, status=SegmentStatus.INTERRUPTED)
+                    for seg in timeline
+                    if seg.status is None
+                )
+                if open_segments:
+                    await self._segments.upsert_many(open_segments)
+                swept += 1
+                continue
+            self._registry.put(fsm)
+            restored += 1
+        return restored, swept

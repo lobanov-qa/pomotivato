@@ -183,13 +183,57 @@ def test_stop_interrupts_open_segment_and_frees_registry(http_session):
 
 
 @pytest.mark.api
-def test_restart_sweeps_live_rows_to_stopped(http_session, tmp_path):
-    client, _clock = http_session
+def test_restart_restores_live_session_when_clock_shared(http_session, tmp_path):
+    client, clock = http_session
     session_id = _start(client, FAST)["id"]
+    clock.advance(timedelta(minutes=3))
 
-    # Same database file, brand-new app = process restart (fresh registry).
+    # Same database file + same time = a process restart at the same moment.
+    restarted = create_app(tmp_path / "sessions-test.db")
+    restarted.state.clock = clock
+    with TestClient(restarted) as fresh:
+        view = fresh.get(f"/api/sessions/{session_id}").json()
+        status = fresh.get("/api/status").json()
+        command = fresh.post(f"/api/sessions/{session_id}/pause")
+
+    assert view["state"] == "running"
+    assert view["remaining_sec"] == 7 * 60
+    assert status["active"] is True
+    assert status["session_id"] == session_id
+    assert command.status_code == HTTPStatus.OK
+
+
+@pytest.mark.api
+def test_restart_catches_overdue_phase_without_time_refund(http_session, tmp_path):
+    client, clock = http_session
+    session_id = _start(client, FAST)["id"]
+    clock.advance(timedelta(minutes=12))  # work (10) is overdue by 2
+
+    restarted = create_app(tmp_path / "sessions-test.db")
+    restarted.state.clock = clock
+    with TestClient(restarted) as fresh:
+        view = fresh.get(f"/api/sessions/{session_id}").json()
+
+    # Honest catch-up: work closed at its ORIGINAL deadline, break started
+    # from there — the 2 wasted minutes are neither refunded nor charged.
+    assert view["state"] == "running"
+    assert view["phase"] == "break"
+    assert view["remaining_sec"] == 3 * 60
+    assert view["timeline"][0]["status"] == "completed"
+
+
+@pytest.mark.api
+def test_restart_sweeps_legacy_rows_without_snapshot(http_session, tmp_path):
+    import sqlite3
+
+    client, clock = http_session
+    session_id = _start(client, FAST)["id"]
     db_file = tmp_path / "sessions-test.db"
+    with sqlite3.connect(db_file) as conn:  # simulate a pre-E3 row
+        conn.execute("UPDATE sessions SET slots_json = NULL")
+
     restarted = create_app(db_file)
+    restarted.state.clock = clock
     with TestClient(restarted) as fresh:
         view = fresh.get(f"/api/sessions/{session_id}").json()
         command = fresh.post(f"/api/sessions/{session_id}/pause")
@@ -198,6 +242,25 @@ def test_restart_sweeps_live_rows_to_stopped(http_session, tmp_path):
     assert view["stop_reason"] == "server_restart"
     assert view["timeline"][0]["status"] == "interrupted"
     assert command.status_code == HTTPStatus.CONFLICT
+
+
+@pytest.mark.api
+def test_paused_session_survives_restart_frozen(http_session, tmp_path):
+    client, clock = http_session
+    session_id = _start(client, FAST)["id"]
+    clock.advance(timedelta(minutes=2))
+    client.post(f"/api/sessions/{session_id}/pause")
+    clock.advance(timedelta(minutes=20))  # wall time burns during downtime
+
+    restarted = create_app(tmp_path / "sessions-test.db")
+    restarted.state.clock = clock
+    with TestClient(restarted) as fresh:
+        view = fresh.get(f"/api/sessions/{session_id}").json()
+        resumed = fresh.post(f"/api/sessions/{session_id}/resume")
+
+    assert view["state"] == "paused"
+    assert view["remaining_sec"] == 8 * 60  # pause does not burn
+    assert resumed.json()["remaining_sec"] == 8 * 60
 
 
 @pytest.mark.api
