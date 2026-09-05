@@ -74,7 +74,7 @@ class SessionFSM:
     ) -> None:
         validate_settings(settings)
         if session is not None and session.state is not SessionState.IDLE:
-            msg = f"cannot resume {session.state.value} session; DB rehydration lands in E2"
+            msg = f"cannot resume {session.state.value} session; use SessionFSM.restore()"
             raise InvalidTransitionError(msg)
         if not day_plan.slots:
             msg = "day plan must have at least one slot to start a session"
@@ -207,6 +207,89 @@ class SessionFSM:
         self._reviews.append(review)
         return review
 
+    @classmethod
+    def restore(
+        cls,
+        clock: Clock,
+        session: Session,
+        segments: tuple[Segment, ...],
+        reviews: tuple[Review, ...],
+    ) -> SessionFSM:
+        """Rehydrate a live FSM from persisted rows (spec 01 v0.3, spec 03 §6).
+
+        The session carries its frozen slot snapshot, so a later day-plan
+        edit cannot corrupt the running timer (GWT-M4). Deadlines recompute
+        from the deadline invariant (started + planned + paused == ends),
+        never from wall-time guesses; an overdue open segment is honest —
+        the first advance() closes it at the original deadline, no refund.
+        Raises InvalidTransitionError for rows that cannot be trusted
+        (legacy pre-snapshot rows, gaps, cursor past the slots): the caller
+        sweeps those to stopped/interrupted exactly like the old Q4 path.
+        """
+        validate_settings(session.settings)
+        if session.state not in (SessionState.RUNNING, SessionState.PAUSED):
+            msg = f"only live sessions can be restored, got {session.state.value}"
+            raise InvalidTransitionError(msg)
+        if session.slots is None or session.started_at is None or not segments:
+            msg = f"session {session.id!r} predates snapshotting; cannot restore"
+            raise InvalidTransitionError(msg)
+        ordered = sorted(session.slots, key=lambda s: s.sector)
+        sectors = [slot.sector for slot in ordered]
+        if len(set(sectors)) != len(sectors) or not ordered:
+            msg = f"duplicate or empty sectors in snapshot: {sectors}"
+            raise DayPlanValidationError(msg)
+
+        fsm = cls.__new__(cls)
+        fsm._clock = clock
+        started = session.started_at
+        fsm._plan = DayPlan(id=session.day_plan_id, date=started.date(), slots=tuple(ordered))
+        fsm._settings = session.settings
+        fsm._session_id = session.id
+        fsm._slots = tuple(ordered)
+        fsm._segments = []
+        for index, seg in enumerate(segments):
+            if seg.started_at is None:
+                msg = f"segment {seg.id!r} has no started_at; cannot restore"
+                raise InvalidTransitionError(msg)
+            deadline = seg.started_at + timedelta(minutes=seg.planned_min, seconds=seg.paused_sec)
+            fsm._segments.append(
+                _Live(
+                    seg_id=seg.id,
+                    index=index,
+                    phase=seg.phase,
+                    planned_min=seg.planned_min,
+                    task_id=seg.task_id,
+                    started_at=seg.started_at,
+                    ends_at=deadline,
+                    paused_total=timedelta(seconds=seg.paused_sec),
+                    status=seg.status,
+                    ended_at=seg.ended_at,
+                )
+            )
+        fsm._reviews = list(reviews)
+        fsm._started_at = session.started_at
+        fsm._stop_reason = None
+
+        open_live = fsm._open_segment_or_none()
+        cursor = sum(seg.phase is SegmentPhase.WORK for seg in segments)
+        if cursor > len(ordered):
+            msg = f"session {session.id!r} consumed more slots than it had"
+            raise InvalidTransitionError(msg)
+        fsm._slot_cursor = cursor
+        boundary = session.state is SessionState.PAUSED and open_live is None
+        paused_no_anchor = (
+            session.state is SessionState.PAUSED
+            and not boundary
+            and session.pause_started_at is None
+        )
+        if paused_no_anchor:
+            msg = f"paused session {session.id!r} without pause_started_at"
+            raise InvalidTransitionError(msg)
+        fsm._state = session.state
+        fsm._boundary_pause = boundary
+        fsm._pause_started = None if boundary else session.pause_started_at
+        return fsm
+
     # ------------------------------------------------------------------ queries
 
     @property
@@ -270,6 +353,8 @@ class SessionFSM:
             settings=self._settings,
             started_at=self._started_at,
             stop_reason=self._stop_reason,
+            slots=self._slots,
+            pause_started_at=self._pause_started,
         )
 
     def snapshot(self) -> tuple[SessionState, SegmentPhase | None, tuple[Segment, ...]]:
@@ -333,4 +418,5 @@ class SessionFSM:
             started_at=live.started_at,
             ended_at=live.ended_at,
             status=live.status,
+            paused_sec=int(live.paused_total.total_seconds()),
         )

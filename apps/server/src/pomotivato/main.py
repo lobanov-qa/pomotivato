@@ -21,8 +21,7 @@ from pomotivato.api.routers import day_plans, reviews, sessions, settings, statu
 from pomotivato.core.clock import SystemClock
 from pomotivato.infra.db import Database, default_db_path
 from pomotivato.infra.migrations import migrate
-from pomotivato.infra.repository_sessions import finalize_orphan_sessions
-from pomotivato.services.session_service import FsmRegistry
+from pomotivato.services.session_service import FsmRegistry, SessionService
 
 
 def _assets_root() -> Path:
@@ -44,11 +43,12 @@ def health() -> dict[str, str]:
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Bring the schema to head, then sweep sessions orphaned by a restart."""
+    """Bring the schema to head, then restore or sweep sessions left live."""
     db: Database = app.state.db
     await migrate(db.db_path)
     async with db.new_session() as session:
-        await finalize_orphan_sessions(session)
+        service = SessionService(session, app.state.clock, app.state.fsm_registry)
+        await service.restore_or_sweep()
     yield
     await db.dispose()
 

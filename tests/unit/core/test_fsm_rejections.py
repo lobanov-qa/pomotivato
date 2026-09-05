@@ -111,12 +111,12 @@ def test_constructor_rejects_empty_day_plan():
 
 
 @pytest.mark.unit
-def test_non_idle_session_resume_is_refused_until_e2_rehydration():
+def test_non_idle_session_constructor_is_refused_when_restore_required():
     from pomotivato.core.models import Session
     from pomotivato.core.models import SessionState as SS
 
     clock = FakeClock(NINE)
     resumed = Session(id="s-old", day_plan_id="p", state=SS.RUNNING, settings=settings_factory())
 
-    with pytest.raises(InvalidTransitionError, match="rehydration lands in E2"):
+    with pytest.raises(InvalidTransitionError, match="use SessionFSM.restore"):
         SessionFSM(clock, plan_with(2), settings_factory(), session=resumed)

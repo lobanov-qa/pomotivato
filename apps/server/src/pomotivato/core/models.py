@@ -137,6 +137,9 @@ class Segment:
     started_at: datetime | None = None
     ended_at: datetime | None = None
     status: SegmentStatus | None = None
+    # Wall time frozen by pauses while the segment was open (spec 01 v0.3);
+    # the deadline invariant started+planned+paused == ends_at holds always.
+    paused_sec: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +150,11 @@ class Session:
     settings: SessionSettings
     started_at: datetime | None = None
     stop_reason: str | None = None
+    # Frozen slot snapshot taken at start() — the honest source for E3
+    # restore; None marks pre-E3 legacy rows that cannot be rehydrated.
+    slots: tuple[Slot, ...] | None = None
+    # When the currently open pause began (only set while state=paused).
+    pause_started_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -322,6 +330,7 @@ def segment_from_dict(data: Mapping[str, Any]) -> Segment:
         started_at=_opt(data.get("started_at"), lambda r: _parse_dt(r, "started_at")),
         ended_at=_opt(data.get("ended_at"), lambda r: _parse_dt(r, "ended_at")),
         status=_opt(raw_status, lambda r: _enum(SegmentStatus, r, "status")),
+        paused_sec=int(data.get("paused_sec", 0)),
     )
 
 
@@ -333,6 +342,12 @@ def session_from_dict(data: Mapping[str, Any]) -> Session:
         settings=session_settings_from_dict(_require(data, "settings")),
         started_at=_opt(data.get("started_at"), lambda r: _parse_dt(r, "started_at")),
         stop_reason=data.get("stop_reason"),
+        slots=(
+            None if data.get("slots") is None else tuple(slot_from_dict(s) for s in data["slots"])
+        ),
+        pause_started_at=_opt(
+            data.get("pause_started_at"), lambda r: _parse_dt(r, "pause_started_at")
+        ),
     )
 
 

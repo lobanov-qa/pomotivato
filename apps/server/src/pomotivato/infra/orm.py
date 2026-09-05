@@ -53,6 +53,10 @@ class SessionRow(Base):
     started_at: Mapped[str | None] = mapped_column(Text)
     settings_json: Mapped[str] = mapped_column(Text)
     stop_reason: Mapped[str | None] = mapped_column(Text)
+    # E3 restore (spec 03 §6): frozen slots + open-pause anchor. Nullable —
+    # legacy rows stay NULL and are swept instead of restored.
+    slots_json: Mapped[str | None] = mapped_column(Text)
+    pause_started_at: Mapped[str | None] = mapped_column(Text)
 
 
 class SegmentRow(Base):
@@ -66,6 +70,8 @@ class SegmentRow(Base):
     started_at: Mapped[str | None] = mapped_column(Text)
     ended_at: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str | None] = mapped_column(Text)
+    # E3 restore: wall time frozen by pauses while this segment was open.
+    paused_sec: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class ReviewRow(Base):
