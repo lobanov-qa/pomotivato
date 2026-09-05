@@ -101,7 +101,6 @@ class SessionService:
                 fsm.resume()
             case "stop":
                 fsm.stop()
-                self._registry.drop(session_id)
             case "skip_break":
                 fsm.skip_break()
             case "advance":
@@ -110,6 +109,13 @@ class SessionService:
                 msg = f"unknown session verb {verb!r}"
                 raise ConflictError(msg)
         await self._persist(fsm)
+        if verb == "stop":
+            # Commit BEFORE dropping from the registry: the request-scoped
+            # transaction only closes when the response leaves, so an SSE
+            # poll landing between drop and commit would find no FSM and a
+            # still-"running" DB row -- a phase-less ghost projection.
+            await self._session.commit()
+            self._registry.drop(session_id)
         return self._view(fsm)
 
     async def get_view(self, session_id: str) -> SessionView:
