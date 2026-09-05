@@ -246,3 +246,28 @@ class SessionSettingsDto(BaseModel):
     @classmethod
     def from_core(cls, settings: SessionSettings) -> SessionSettingsDto:
         return cls(**to_dict(settings))
+
+
+class StatusDto(BaseModel):
+    """Flat script contract for GET /api/status (spec 03 §5; fields are
+    additive — removal would be a breaking change)."""
+
+    active: bool
+    session_id: str | None = None
+    state: str | None = None
+    phase: str | None = None
+    remaining_sec: int | None = None
+    server_now: str
+    date: str
+
+
+class DailySummaryDto(BaseModel):
+    """Projection of one day: counts come from persisted FSM rows only."""
+
+    date: str
+    blocks_done: int
+    blocks_planned: int
+    focus_min: int
+    average_score: float | None
+    reviews_count: int
+    tasks_done: int
