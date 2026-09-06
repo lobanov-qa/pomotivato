@@ -9,11 +9,13 @@
  * nothing behind itself.
  */
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pause, Play, SkipForward, Square } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api, type SessionDto } from "@/api/client";
 import { Dial } from "@/components/dial/Dial";
+import { ReviewModal } from "@/components/dial/ReviewModal";
+import { SummaryPanel } from "@/components/dial/SummaryPanel";
 import { Button } from "@/components/ui/button";
 import { useTasks } from "@/features/kanban/hooks";
 import { deriveSlots } from "@/features/kanban/planner";
@@ -88,6 +90,35 @@ export function FocusScreen() {
     () => deriveSlots(tasks.filter((task) => task.status === "doing")),
     [tasks],
   );
+
+  // Review flow (spec 03 §2): a closed work segment with no review opens
+  // the modal; the FSM never waits for it (timer runs behind the overlay).
+  const [dismissed, setDismissed] = useState<string[]>([]);
+  const pendingReview = useMemo(() => {
+    if (!session) return null;
+    const reviewed = new Set(session.reviews.map((r) => r.segment_id));
+    const closed = session.timeline.find(
+      (seg) =>
+        seg.phase === "work" &&
+        seg.status === "completed" &&
+        !reviewed.has(seg.id) &&
+        !dismissed.includes(seg.id),
+    );
+    return closed ?? null;
+  }, [session, dismissed]);
+
+  const reviewError = useMutation({ mutationFn: api.submitReview });
+
+  async function submitReview(score: number, comment: string | undefined): Promise<void> {
+    if (!pendingReview) return;
+    await reviewError.mutateAsync({
+      segment_id: pendingReview.id,
+      score,
+      comment,
+    });
+    setDismissed((ids) => ids.filter((id) => id !== pendingReview.id));
+    await refetch().catch(() => undefined);
+  }
 
   async function act(verb: "start" | "pause" | "resume" | "stop" | "skip"): Promise<void> {
     try {
@@ -221,8 +252,23 @@ export function FocusScreen() {
         </ol>
       )}
       {session && <ScoreBadge session={session} />}
+      <SummaryPanel />
       {/* no "В работе" list here: the funnel law makes doing == the dial,
           and the legend above already names every sector in full */}
+      {pendingReview && (
+        <ReviewModal
+          taskTitle={titleOf(pendingReview.task_id) || t("dial.phase-work")}
+          onSubmit={submitReview}
+          onDismiss={() =>
+            setDismissed((ids) => [...ids, pendingReview.id])
+          }
+        />
+      )}
+      {reviewError.isError && (
+        <p className="text-sm text-danger" data-testid="review.error">
+          {t("review.error")}
+        </p>
+      )}
     </div>
   );
 }

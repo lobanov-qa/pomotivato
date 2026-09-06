@@ -72,6 +72,22 @@ const RU = {
   "dial.disconnected": "Соединение потеряно…",
   "dial.phase-paused": "Пауза",
   "dial.next-task": "следующая:",
+
+  "review.kick": "Блок завершён",
+  "review.title": "Оцени продуктивность",
+  "review.scale-min": "вяло",
+  "review.scale-max": "в потоке",
+  "review.comment-placeholder": "Комментарий (необязательно)",
+  "review.submit": "Сохранить",
+  "review.dismiss": "Позже",
+  "review.error": "Оценку не принято. Попробуй ещё раз.",
+
+  "summary.title": "Сводка дня",
+  "summary.blocks": "блоков",
+  "summary.focus": "фокус",
+  "summary.planned": "план",
+  "summary.tasks": "задач",
+  "summary.min": "мин",
 } as const;
 
 export type MessageKey = keyof typeof RU;
