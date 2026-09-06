@@ -1,1 +1,84 @@
 @import "tailwindcss";
+
+/*
+ * Design tokens (Tailwind v4 CSS-first theme, shadcn-compatible names).
+ * ONE palette for the whole app: the dial SVG (e3-web-dial) must consume
+ * these same variables (fill="var(--color-work)" etc.), so phase colors,
+ * radii and shadows are decided here once, not per screen (author rule:
+ * the UI must look modern and consistent with the dial).
+ *
+ * Dark theme = plain CSS-variable overrides under prefers-color-scheme.
+ * NEVER put a second @theme inside @media — Tailwind v4 hoists it to
+ * :root and the dark palette silently wins over light (caught in smoke).
+ */
+@theme {
+  /* surfaces & text */
+  --color-background: #fafafa;
+  --color-foreground: #18181b;
+  --color-card: #ffffff;
+  --color-muted: #f4f4f5;
+  --color-muted-foreground: #71717a;
+  --color-border: #e4e4e7;
+  --color-input: #e4e4e7;
+  --color-ring: #a1a1aa;
+
+  /* brand + timer phases (dial sectors use these verbatim) */
+  --color-primary: #e11d48; /* rose-600: WORK / accent */
+  --color-primary-foreground: #ffffff;
+  --color-work: #e11d48;
+  --color-break: #0d9488; /* teal-600: short break */
+  --color-long-break: #6366f1; /* indigo-500: long break */
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+
+  /* kanban columns (kept muted so phase colors stay unique) */
+  --color-col-backlog: #a1a1aa;
+  --color-col-planned: #3b82f6;
+  --color-col-doing: #e11d48;
+  --color-col-done: #16a34a;
+
+  /* shape language shared with the dial */
+  --radius-card: 0.75rem;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.05), 0 1px 3px rgb(0 0 0 / 0.06);
+  --shadow-card-hover: 0 4px 12px rgb(0 0 0 / 0.08);
+  --shadow-card-drag: 0 12px 28px rgb(0 0 0 / 0.18);
+
+  --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: #09090b;
+    --color-foreground: #fafafa;
+    --color-card: #18181b;
+    --color-muted: #27272a;
+    --color-muted-foreground: #a1a1aa;
+    --color-border: #27272a;
+    --color-input: #3f3f46;
+    --color-ring: #52525b;
+
+    --color-primary: #f43f5e; /* rose-500 reads better on dark */
+    --color-primary-foreground: #0f0a0b;
+    --color-work: #f43f5e;
+    --color-break: #14b8a6;
+    --color-long-break: #818cf8;
+
+    --color-col-backlog: #71717a;
+    --color-col-planned: #60a5fa;
+    --color-col-doing: #f43f5e;
+    --color-col-done: #22c55e;
+
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-card-hover: 0 4px 12px rgb(0 0 0 / 0.5);
+    --shadow-card-drag: 0 12px 28px rgb(0 0 0 / 0.6);
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+  * {
+    border-color: var(--color-border);
+  }
+}
