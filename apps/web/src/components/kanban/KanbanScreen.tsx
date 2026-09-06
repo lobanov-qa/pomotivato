@@ -10,7 +10,7 @@ import {
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { api, type TaskDto, type TaskStatus } from "@/api/client";
+import { api, ApiError, type TaskDto, type TaskStatus } from "@/api/client";
 import { KanbanColumn } from "@/components/kanban/KanbanColumn";
 import { TaskCard } from "@/components/kanban/TaskCard";
 import { Button } from "@/components/ui/button";
@@ -43,7 +43,7 @@ export function KanbanScreen() {
 
   const [editingColumn, setEditingColumn] = useState<BoardColumn | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [conflictToast, setConflictToast] = useState(false);
+  const [conflictToast, setConflictToast] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
 
   const sensors = useSensors(
@@ -78,10 +78,15 @@ export function KanbanScreen() {
     if (!task || dropTarget(task.status, to) === null) return;
     try {
       await move.mutateAsync({ id: task.id, to });
-    } catch {
-      // optimistic cache already rolled back in onError; just announce it
-      setConflictToast(true);
-      window.setTimeout(() => setConflictToast(false), 2500);
+    } catch (error) {
+      // optimistic cache already rolled back in onError; announce the
+      // server's own reason (illegal transition vs in-work capacity)
+      setConflictToast(
+        error instanceof ApiError && error.message
+          ? error.message
+          : t("kanban.conflict-moved-back"),
+      );
+      window.setTimeout(() => setConflictToast(null), 3500);
       return;
     }
     void syncPlan();
@@ -206,7 +211,7 @@ export function KanbanScreen() {
           data-testid="kanban.conflict-toast"
           className="fixed bottom-6 left-1/2 -translate-x-1/2 rounded-lg bg-foreground px-4 py-2 text-sm text-background shadow-card-drag"
         >
-          {t("kanban.conflict-moved-back")}
+          {conflictToast}
         </div>
       )}
     </div>

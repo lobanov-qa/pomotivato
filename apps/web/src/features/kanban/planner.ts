@@ -15,11 +15,11 @@ import type { SlotDto, TaskDto } from "@/api/client";
 export const MAX_PLAN_SLOTS = 12; // core MAX_SECTOR
 
 /** Sector slots for today from the doing column, capped at the dial. */
-export function deriveSlots(doing: TaskDto[]): SlotDto[] {
+export function deriveSlots(doing: TaskDto[], maxSlots: number = MAX_PLAN_SLOTS): SlotDto[] {
   const slots: SlotDto[] = [];
   for (const task of doing) {
     for (let i = 0; i < Math.max(1, task.estimate_blocks); i++) {
-      if (slots.length >= MAX_PLAN_SLOTS) return slots;
+      if (slots.length >= Math.min(maxSlots, MAX_PLAN_SLOTS)) return slots;
       slots.push({ sector: slots.length + 1, task_id: task.id });
     }
   }

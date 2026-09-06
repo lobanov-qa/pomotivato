@@ -99,6 +99,31 @@ def test_patch_rejects_blank_title_when_v1_breaks(http_app):
 
 
 @pytest.mark.api
+def test_doing_transition_respects_capacity_gate(http_app):
+    """Funnel law server-side: the (N+1)-th card into doing gets 409."""
+    for i in range(3):
+        created = http_app.post("/api/tasks", json=_task_payload(id=f"cap-{i}", title=f"Cap {i}"))
+        assert created.status_code == HTTPStatus.CREATED
+        planned = http_app.post(f"/api/tasks/cap-{i}/status", json={"to": "planned"})
+        assert planned.status_code == HTTPStatus.OK
+
+    limited = http_app.put("/api/settings/ui", json={"max_in_work": 2, "theme": "auto"})
+    assert limited.status_code == HTTPStatus.OK
+
+    first = http_app.post("/api/tasks/cap-0/status", json={"to": "doing"})
+    second = http_app.post("/api/tasks/cap-1/status", json={"to": "doing"})
+    third = http_app.post("/api/tasks/cap-2/status", json={"to": "doing"})
+
+    assert first.status_code == second.status_code == HTTPStatus.OK
+    assert third.status_code == HTTPStatus.CONFLICT
+    assert "2" in third.json()["detail"]["message"]
+    # a task LEAVING doing frees capacity for the next one
+    http_app.post("/api/tasks/cap-0/status", json={"to": "planned"})
+    retry = http_app.post("/api/tasks/cap-2/status", json={"to": "doing"})
+    assert retry.status_code == HTTPStatus.OK
+
+
+@pytest.mark.api
 def test_status_machine_maps_illegal_move_to_409(http_app):
     http_app.post("/api/tasks", json=_task_payload())
 
@@ -170,15 +195,18 @@ def test_day_plan_422_when_slot_unknown_task(http_app):
 def test_settings_roundtrip_and_v5_rejection(http_app):
     default = http_app.get("/api/settings")
     assert default.json() == {
-        "work_min": 25,
-        "break_min": 5,
-        "long_break_min": 15,
-        "long_break_every": 4,
-        "auto_start_next": True,
+        "session": {
+            "work_min": 25,
+            "break_min": 5,
+            "long_break_min": 15,
+            "long_break_every": 4,
+            "auto_start_next": True,
+        },
+        "ui": {"max_in_work": 6, "theme": "auto"},
     }
 
     ok = http_app.put(
-        "/api/settings",
+        "/api/settings/session",
         json={
             "work_min": 50,
             "break_min": 10,
@@ -188,7 +216,7 @@ def test_settings_roundtrip_and_v5_rejection(http_app):
         },
     )
     bad = http_app.put(
-        "/api/settings",
+        "/api/settings/session",
         json={
             "work_min": 500,
             "break_min": 5,
@@ -201,4 +229,33 @@ def test_settings_roundtrip_and_v5_rejection(http_app):
 
     assert ok.status_code == HTTPStatus.OK
     assert bad.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
-    assert after_bad.json()["work_min"] == 50  # rollback: bad PUT did not stick
+    assert after_bad.json()["session"]["work_min"] == 50  # rollback: bad PUT stuck nothing
+
+
+@pytest.mark.api
+def test_ui_settings_roundtrip_keeps_session_key(http_app):
+    before = http_app.get("/api/settings").json()["session"]
+
+    ok = http_app.put("/api/settings/ui", json={"max_in_work": 9, "theme": "dark"})
+    after = http_app.get("/api/settings").json()
+
+    assert ok.status_code == HTTPStatus.OK
+    assert after["ui"] == {"max_in_work": 9, "theme": "dark"}
+    assert after["session"] == before  # keys are independent (spec 03 §9)
+
+
+@pytest.mark.api
+def test_ui_settings_rejects_capacity_outside_1_12(http_app):
+    for value in (0, 13):
+        response = http_app.put("/api/settings/ui", json={"max_in_work": value, "theme": "auto"})
+        assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY, value
+
+    after = http_app.get("/api/settings").json()
+    assert after["ui"]["max_in_work"] == 6  # default untouched
+
+
+@pytest.mark.api
+def test_ui_settings_rejects_unknown_theme(http_app):
+    response = http_app.put("/api/settings/ui", json={"max_in_work": 6, "theme": "hotdog"})
+
+    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY

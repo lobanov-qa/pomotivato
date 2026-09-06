@@ -118,6 +118,18 @@ describe("KanbanScreen", () => {
           return jsonResponse(201, task({ id: "new-1", title: "Fresh card" }));
         }
         if (url.startsWith("/api/tasks")) return jsonResponse(200, BOARD);
+        if (url.startsWith("/api/settings")) {
+          return jsonResponse(200, {
+            session: {
+              work_min: 25,
+              break_min: 5,
+              long_break_min: 15,
+              long_break_every: 4,
+              auto_start_next: true,
+            },
+            ui: { max_in_work: 12, theme: "auto" },
+          });
+        }
         return jsonResponse(200, { id: "p", date: "2026-09-05", slots: [] });
       },
     );

@@ -70,12 +70,18 @@ export function useSessionEvents(sessionId: string | null): DialState {
         { phase: data.phase, phase_ends_at: data.ends_at, remaining_sec: data.remaining_sec },
         true,
       );
+      // phase_changed carries no timeline: a fresh segment opened, so the
+      // merged view would lose the open segment (the hand/rim freeze and
+      // the review modal never fires). Refetch the full authoritative view.
+      void refetch().catch(() => undefined);
     });
     source.addEventListener("segment_closed", (event) => {
       const data = JSON.parse((event as MessageEvent).data) as {
         segment_id: string;
         status: string;
       };
+      // Cosmetic merge for a known segment; if the client somehow missed
+      // its opening, the next phase_changed/snapshot refetch heals it.
       setSnapshot((prev) =>
         prev && prev.key === sessionId
           ? {
@@ -109,7 +115,7 @@ export function useSessionEvents(sessionId: string | null): DialState {
       closed = true;
       source.close();
     };
-  }, [sessionId]);
+  }, [sessionId, refetch]);
 
   const current = snapshot && snapshot.key === sessionId ? snapshot : null;
   return {

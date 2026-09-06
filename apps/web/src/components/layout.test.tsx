@@ -1,14 +1,18 @@
-/**
- * Route table for tests (spec 03 §7 testid policy). Only interactive/nav
- * surfaces get a testid; the components themselves live in later PRs.
- */
-
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import Layout from "../components/Layout";
-import Placeholder from "../components/Placeholder";
+
+/**
+ * Route table for tests (spec 03 §7 testid policy). Only interactive/nav
+ * surfaces get a testid; screens themselves are stubs here — the shell is
+ * under test, real screens own their tests (kanban/dial/settings).
+ */
+
+function Stub({ id }: { id: string }) {
+  return <div data-testid={id} />;
+}
 
 function routes() {
   return createMemoryRouter(
@@ -17,9 +21,9 @@ function routes() {
         path: "/",
         element: <Layout />,
         children: [
-          { index: true, element: <Placeholder titleKey="nav.tasks" /> },
-          { path: "focus", element: <Placeholder titleKey="nav.focus" /> },
-          { path: "settings", element: <Placeholder titleKey="nav.settings" /> },
+          { index: true, element: <Stub id="stub.tasks" /> },
+          { path: "focus", element: <Stub id="stub.focus" /> },
+          { path: "settings", element: <Stub id="stub.settings" /> },
         ],
       },
     ],
@@ -42,10 +46,10 @@ describe("app shell", () => {
     render(<RouterProvider router={routes()} />);
 
     await user.click(screen.getByTestId("nav.focus-link"));
-    expect(screen.getByTestId("placeholder.root")).toHaveTextContent("Фокус");
+    expect(screen.getByTestId("stub.focus")).toBeInTheDocument();
 
     await user.click(screen.getByTestId("nav.settings-link"));
-    expect(screen.getByTestId("placeholder.root")).toHaveTextContent("Настройки");
+    expect(screen.getByTestId("stub.settings")).toBeInTheDocument();
   });
 
   it("marks the current route for styling", () => {

@@ -11,8 +11,6 @@ const RU_KEYS = [
   "nav.tasks",
   "nav.focus",
   "nav.settings",
-  "app.placeholder.title",
-  "app.placeholder.body",
   "error.network",
   "error.unknown",
 ] as const satisfies readonly MessageKey[];

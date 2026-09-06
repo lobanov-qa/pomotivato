@@ -40,10 +40,17 @@ export function TaskCard({ task, editing, onChange, onDelete, parents }: Props) 
   const listeners = drag.listeners ?? {};
   const style = { transform: CSS.Translate.toString(drag.transform) };
 
+  const setRefs = (node: HTMLElement | null) => {
+    // dnd-kit needs the node's layout rect to compute drop targets;
+    // without it `over` is always null and drops silently no-op.
+    drag.setNodeRef(node);
+  };
+
   const set = (changes: Partial<TaskDto>) => onChange(task.id, changes);
 
   return (
     <article
+      ref={setRefs}
       data-testid={`task-card.root-${task.id}`}
       style={style}
       className={cn(
