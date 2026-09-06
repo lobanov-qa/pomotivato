@@ -58,6 +58,8 @@ export interface SessionDto {
   settings: SessionSettingsDto;
   timeline: SegmentDto[];
   reviews: { segment_id: string; score: number; comment: string | null }[];
+  /** Frozen slot snapshot (spec 01 v0.3): dial sectors; null = legacy row. */
+  slots: SlotDto[] | null;
 }
 
 export interface SlotDto {

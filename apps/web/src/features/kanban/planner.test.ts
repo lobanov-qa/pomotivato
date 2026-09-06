@@ -2,22 +2,23 @@ import { describe, expect, it } from "vitest";
 import type { TaskDto } from "@/api/client";
 import { deriveSlots, MAX_PLAN_SLOTS, planIdForDate } from "./planner";
 
-function planned(id: string, blocks: number): TaskDto {
-  return { id, status: "planned", estimate_blocks: blocks } as TaskDto;
+function doing(id: string, blocks: number): TaskDto {
+  return { id, status: "doing", estimate_blocks: blocks } as TaskDto;
 }
 
 /**
  * Planner projection (equivalence classes: empty plan, chunked tasks,
  * cap boundary): sectors 1..N contiguous, one task may take several.
+ * Source column is «В работе» = today (author's funnel law 2026-09-06).
  */
 
 describe("deriveSlots", () => {
-  it("returns no slots for an empty planned column", () => {
+  it("returns no slots for an empty doing column", () => {
     expect(deriveSlots([])).toEqual([]);
   });
 
   it("expands estimate_blocks into consecutive sectors by task order", () => {
-    const slots = deriveSlots([planned("a", 2), planned("b", 1)]);
+    const slots = deriveSlots([doing("a", 2), doing("b", 1)]);
 
     expect(slots).toEqual([
       { sector: 1, task_id: "a" },
@@ -27,11 +28,11 @@ describe("deriveSlots", () => {
   });
 
   it("treats estimate < 1 as a single slot", () => {
-    expect(deriveSlots([planned("a", 0)])).toEqual([{ sector: 1, task_id: "a" }]);
+    expect(deriveSlots([doing("a", 0)])).toEqual([{ sector: 1, task_id: "a" }]);
   });
 
   it("caps the day at MAX_PLAN_SLOTS (dial has 12 sectors)", () => {
-    const slots = deriveSlots(Array.from({ length: 8 }, (_, i) => planned(`t${i}`, 3)));
+    const slots = deriveSlots(Array.from({ length: 8 }, (_, i) => doing(`t${i}`, 3)));
 
     expect(slots).toHaveLength(MAX_PLAN_SLOTS);
     expect(slots.at(-1)).toEqual({ sector: MAX_PLAN_SLOTS, task_id: "t3" });

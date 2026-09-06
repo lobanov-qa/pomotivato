@@ -208,6 +208,9 @@ class SessionDto(BaseModel):
     settings: SessionSettingsDto
     timeline: list[SegmentDto]
     reviews: list[ReviewDto]
+    # Frozen slot snapshot (spec 01 v0.3): the dial's sector count and per-
+    # sector task identity. None marks pre-E3 legacy rows (additive field).
+    slots: list[SlotDto] | None = None
 
     @classmethod
     def from_view(cls, view: SessionView) -> SessionDto:
@@ -224,6 +227,11 @@ class SessionDto(BaseModel):
             settings=SessionSettingsDto.from_core(view.session.settings),
             timeline=[SegmentDto.from_core(seg) for seg in view.timeline],
             reviews=[ReviewDto.from_core(review) for review in view.reviews],
+            slots=(
+                [SlotDto(**to_dict(s)) for s in view.session.slots]
+                if view.session.slots is not None
+                else None
+            ),
         )
 
 

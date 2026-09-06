@@ -52,14 +52,14 @@ export function KanbanScreen() {
   const dragged = draggedId ? byId.get(draggedId) : undefined;
 
   const planTasks = useMemo(() => {
-    const planned = tasks.filter((task) => task.status === "planned");
-    return deriveSlots(planned);
+    const doing = tasks.filter((task) => task.status === "doing");
+    return deriveSlots(doing);
   }, [tasks]);
 
-  /** Re-PUT the derived day plan after any planned-column change. */
+  /** Re-PUT the derived day plan after any doing-column change. */
   async function syncPlan(): Promise<void> {
     const latest = client.getQueryData<TaskDto[]>(TASKS_KEY) ?? [];
-    const slots = deriveSlots(latest.filter((task) => task.status === "planned"));
+    const slots = deriveSlots(latest.filter((task) => task.status === "doing"));
     const date = today();
     if (slots.length === 0) return; // V9: an empty plan is not sendable
     await api.putDayPlan({ id: planIdForDate(date), date, slots });
