@@ -73,6 +73,26 @@ def test_start_returns_running_work_when_plan_has_slots(http_session):
 
 
 @pytest.mark.api
+def test_get_exposes_frozen_slots_snapshot_when_session_started(http_session):
+    """Dial sectors come from the snapshot, not the live plan (spec 03 §3)."""
+    client, _clock = http_session
+
+    started = _start(client, FAST)
+    client.put(
+        f"/api/day-plans/{DEFAULT_MOMENT.date().isoformat()}",
+        json={
+            "id": "p-1",
+            "date": DEFAULT_MOMENT.date().isoformat(),
+            "slots": [{"sector": 1, "task_id": "t-2"}],
+        },
+    )
+
+    view = client.get(f"/api/sessions/{started['id']}").json()
+
+    assert [slot["task_id"] for slot in view["slots"]] == ["t-1", "t-2"]
+
+
+@pytest.mark.api
 def test_start_404s_when_day_plan_missing(http_session):
     client, _clock = http_session
 

@@ -34,7 +34,7 @@ function task(overrides: Partial<TaskDto> = {}): TaskDto {
 const BOARD: TaskDto[] = [
   task({ id: "a", title: "Backlog card" }),
   task({ id: "b", title: "Planned card", status: "planned", estimate_blocks: 2 }),
-  task({ id: "c", title: "Doing card", status: "doing" }),
+  task({ id: "c", title: "Doing card", status: "doing", estimate_blocks: 2 }),
   task({ id: "d", title: "Done card", status: "done" }),
 ];
 
@@ -100,12 +100,12 @@ describe("KanbanScreen", () => {
     expect(screen.getByTestId("task-card.blocks-b")).toHaveTextContent("2");
   });
 
-  it("derives the day plan from the planned column", async () => {
+  it("derives the day plan from the doing column (today = the dial)", async () => {
     renderScreen();
 
     const first = await screen.findByTestId("planner.slot-1");
-    expect(first).toHaveTextContent("Planned card");
-    expect(screen.getByTestId("planner.slot-2")).toHaveTextContent("Planned card");
+    expect(first).toHaveTextContent("Doing card");
+    expect(screen.getByTestId("planner.slot-2")).toHaveTextContent("Doing card");
     expect(screen.queryByTestId("planner.slot-3")).not.toBeInTheDocument();
   });
 
