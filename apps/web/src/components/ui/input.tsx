@@ -33,3 +33,12 @@ export const Textarea = forwardRef<
   />
 ));
 Textarea.displayName = "Textarea";
+
+export function Label({ className, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) {
+  return (
+    <label
+      className={cn("text-sm font-medium text-foreground/80 select-none", className)}
+      {...props}
+    />
+  );
+}

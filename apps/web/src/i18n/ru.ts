@@ -14,10 +14,6 @@ const RU = {
   "nav.focus": "Фокус",
   "nav.settings": "Настройки",
 
-  "app.placeholder.title": "Раздел в работе",
-  "app.placeholder.body":
-    "Экран появится в ближайших PR этапа MVP. Каркас, навигация и словарь — уже живые.",
-
   "error.network": "Сервер не отвечает. Проверь, что Pomotivato запущен.",
   "error.unknown": "Что-то пошло не так. Попробуй ещё раз.",
 
@@ -88,6 +84,22 @@ const RU = {
   "summary.planned": "план",
   "summary.tasks": "задач",
   "summary.min": "мин",
+
+  "settings.section-intervals": "Интервалы",
+  "settings.section-ui": "Интерфейс",
+  "settings.work": "Работа, мин",
+  "settings.break": "Перерыв, мин",
+  "settings.long-break": "Длинный перерыв, мин",
+  "settings.long-every": "Длинный каждые N блоков",
+  "settings.auto-start": "Авто-старт после перерыва",
+  "settings.max-in-work": "Максимум задач в работе",
+  "settings.theme": "Тема",
+  "settings.theme-auto": "Как в системе",
+  "settings.theme-light": "Светлая",
+  "settings.theme-dark": "Тёмная",
+  "settings.save": "Сохранить",
+  "settings.dirty": "Есть несохранённые изменения",
+  "settings.error": "Не сохранено. Проверь значения.",
 } as const;
 
 export type MessageKey = keyof typeof RU;

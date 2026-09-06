@@ -46,8 +46,16 @@
   --font-sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
 }
 
+/*
+ * Theme switching (spec 03 ⚑ Q9 + settings PR 8): three states, no theme
+ * engine —
+ *   html[data-theme="light"] -> always the @theme block above
+ *   html[data-theme="dark"]  -> forced dark vars below
+ *   html[data-theme="auto"]  -> follow the OS (media query)
+ * The server-stored ui.theme setting owns the data-theme attribute.
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --color-background: #09090b;
     --color-foreground: #fafafa;
     --color-card: #18181b;
@@ -72,6 +80,32 @@
     --shadow-card-hover: 0 4px 12px rgb(0 0 0 / 0.5);
     --shadow-card-drag: 0 12px 28px rgb(0 0 0 / 0.6);
   }
+}
+
+:root[data-theme="dark"] {
+  --color-background: #09090b;
+  --color-foreground: #fafafa;
+  --color-card: #18181b;
+  --color-muted: #27272a;
+  --color-muted-foreground: #a1a1aa;
+  --color-border: #27272a;
+  --color-input: #3f3f46;
+  --color-ring: #52525b;
+
+  --color-primary: #f43f5e;
+  --color-primary-foreground: #0f0a0b;
+  --color-work: #f43f5e;
+  --color-break: #14b8a6;
+  --color-long-break: #818cf8;
+
+  --color-col-backlog: #71717a;
+  --color-col-planned: #60a5fa;
+  --color-col-doing: #f43f5e;
+  --color-col-done: #22c55e;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-card-hover: 0 4px 12px rgb(0 0 0 / 0.5);
+  --shadow-card-drag: 0 12px 28px rgb(0 0 0 / 0.6);
 }
 
 @layer base {

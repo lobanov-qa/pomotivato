@@ -7,7 +7,7 @@ types; every business rule stays in pomotivato.core validators (DRY).
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -254,6 +254,28 @@ class SessionSettingsDto(BaseModel):
     @classmethod
     def from_core(cls, settings: SessionSettings) -> SessionSettingsDto:
         return cls(**to_dict(settings))
+
+
+ThemeName = Literal["auto", "light", "dark"]
+
+
+class UiSettingsDto(BaseModel):
+    """UI-only settings (spec 03 §5, ⚑ Q3/Q9): in-work capacity + theme.
+
+    max_in_work caps the «В работе» funnel column (= today = the dial,
+    author's funnel law); sectors themselves always equal the plan size.
+    Lives outside core: presentation, not domain rule (12 = MAX_SECTOR).
+    """
+
+    max_in_work: int = Field(default=6, ge=1, le=12)
+    theme: ThemeName = "auto"
+
+
+class SettingsBundleDto(BaseModel):
+    """GET /api/settings dictionary (spec 03 §5): every key in one read."""
+
+    session: SessionSettingsDto
+    ui: UiSettingsDto
 
 
 class StatusDto(BaseModel):

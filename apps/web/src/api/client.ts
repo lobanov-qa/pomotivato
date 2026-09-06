@@ -34,6 +34,18 @@ export interface SessionSettingsDto {
   auto_start_next: boolean;
 }
 
+export type ThemeName = "auto" | "light" | "dark";
+
+export interface UiSettingsDto {
+  max_in_work: number;
+  theme: ThemeName;
+}
+
+export interface SettingsBundleDto {
+  session: SessionSettingsDto;
+  ui: UiSettingsDto;
+}
+
 export interface SegmentDto {
   id: string;
   session_id: string;
@@ -160,9 +172,10 @@ export const api = {
   submitReview: (body: { segment_id: string; score: number; comment?: string }) =>
     request<{ segment_id: string; score: number }>("POST", "/api/reviews", body),
 
-  getSettings: () => request<SessionSettingsDto>("GET", "/api/settings"),
-  putSettings: (settings: SessionSettingsDto) =>
-    request<SessionSettingsDto>("PUT", "/api/settings", settings),
+  getSettings: () => request<SettingsBundleDto>("GET", "/api/settings"),
+  putSessionSettings: (settings: SessionSettingsDto) =>
+    request<SessionSettingsDto>("PUT", "/api/settings/session", settings),
+  putUiSettings: (ui: UiSettingsDto) => request<UiSettingsDto>("PUT", "/api/settings/ui", ui),
 
   getStatus: () => request<StatusDto>("GET", "/api/status"),
   getSummary: (date: string) => request<DailySummaryDto>("GET", `/api/summary/${date}`),

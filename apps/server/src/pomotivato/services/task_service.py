@@ -108,6 +108,14 @@ class TaskService:
         if new_status is TaskStatus.PLANNED:
             require = await self._settings.require_science_fields()
             validate_planning_ready(task, require)
+        if new_status is TaskStatus.DOING and task.status is not TaskStatus.DOING:
+            # Funnel law: "В работе" == today == the dial; the capacity is
+            # a server-side gate so no client (or second window) overflows.
+            limit, _theme = await self._settings.get_ui_settings()
+            in_work = await self._tasks.list(status=TaskStatus.DOING)
+            if len(in_work) >= limit:
+                msg = f"only {limit} tasks fit in work today"
+                raise ConflictError(msg)
         updated = replace(task, status=new_status)
         await self._tasks.put(updated)
         await self._session.flush()

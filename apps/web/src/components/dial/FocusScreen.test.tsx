@@ -201,4 +201,27 @@ describe("FocusScreen", () => {
     FakeSource.instances[0].emit("snapshot", session({ remaining_sec: 300 }));
     await waitFor(() => expect(screen.getByTestId("dial.time-readout")).toHaveTextContent("5:00"));
   });
+
+  it("refetches the full view on phase_changed (hand/rim need the new segment)", async () => {
+    renderScreen();
+    await waitFor(() => expect(FakeSource.instances).toHaveLength(1));
+    const getsBefore = fetchMock.mock.calls.filter(
+      ([url, init]) => String(url).startsWith("/api/sessions/s-1") && (!init || init.method === "GET"),
+    ).length;
+
+    FakeSource.instances[0].emit("phase_changed", {
+      phase: "break",
+      segment_id: "s-1-1",
+      ends_at: "2026-09-06T09:15:00+00:00",
+      remaining_sec: 300,
+    });
+
+    await waitFor(() => {
+      const gets = fetchMock.mock.calls.filter(
+        ([url, init]) =>
+          String(url).startsWith("/api/sessions/s-1") && (!init || init.method === "GET"),
+      ).length;
+      expect(gets).toBeGreaterThan(getsBefore);
+    });
+  });
 });
