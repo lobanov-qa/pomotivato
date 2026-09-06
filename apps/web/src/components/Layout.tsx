@@ -9,12 +9,12 @@ import { NavLink, Outlet } from "react-router-dom";
 import { t } from "../i18n/ru";
 
 const LINK_CLASS =
-  "rounded-md px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 aria-[current=page]:bg-zinc-900 aria-[current=page]:text-white";
+  "rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground aria-[current=page]:bg-foreground aria-[current=page]:text-background";
 
 export default function Layout() {
   return (
-    <div className="min-h-screen bg-white text-zinc-900" data-testid="app.shell">
-      <header className="border-b border-zinc-200">
+    <div className="min-h-screen bg-background text-foreground" data-testid="app.shell">
+      <header className="border-b bg-background/80 backdrop-blur">
         <nav
           className="mx-auto flex max-w-4xl items-center gap-1 px-4 py-3"
           aria-label={t("app.name")}
