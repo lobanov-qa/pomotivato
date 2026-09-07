@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pomotivato.api.errors import register_error_handlers
 from pomotivato.api.routers import (
     day_plans,
+    export,
     reviews,
     session_events,
     sessions,
@@ -86,6 +87,7 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     app.include_router(status.summary_router)
     app.include_router(stats.router)
     app.include_router(week.router)
+    app.include_router(export.router)
     app.get("/health")(health)
 
     # One process serves UI + API: if the frontend has been built next to

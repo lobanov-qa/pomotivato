@@ -158,6 +158,11 @@ class DayPlanRepository:
         row = await self._session.get(DayPlanRow, plan_id)
         return None if row is None else _plan_from_row(row)
 
+    async def list_all(self) -> tuple[DayPlan, ...]:
+        """Every saved plan, by date (export scans the full history)."""
+        rows = await self._session.scalars(select(DayPlanRow).order_by(DayPlanRow.date))
+        return tuple(_plan_from_row(row) for row in rows)
+
     async def dates_referencing(self, task_id: str) -> tuple[date, ...]:
         """Dates whose plan still places this task in a slot.
 
