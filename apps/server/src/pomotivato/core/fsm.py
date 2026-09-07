@@ -13,7 +13,7 @@ paused_total and a completed work segment worked exactly planned_min.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta, tzinfo
 from uuid import uuid4
 
 from pomotivato.core.clock import Clock, as_utc
@@ -32,6 +32,7 @@ from pomotivato.core.models import (
     SessionSettings,
     SessionState,
     Slot,
+    SpecialBreak,
 )
 from pomotivato.core.validation import validate_review, validate_settings
 
@@ -50,6 +51,7 @@ class _Live:
     paused_total: timedelta = field(default_factory=lambda: timedelta(0))
     status: SegmentStatus | None = None
     ended_at: datetime | None = None
+    break_label: str | None = None
 
     @property
     def is_open(self) -> bool:
@@ -71,6 +73,7 @@ class SessionFSM:
         day_plan: DayPlan,
         settings: SessionSettings,
         session: Session | None = None,
+        tz: tzinfo | None = None,
     ) -> None:
         validate_settings(settings)
         if session is not None and session.state is not SessionState.IDLE:
@@ -86,6 +89,9 @@ class SessionFSM:
         self._clock = clock
         self._plan = day_plan
         self._settings = settings
+        # Local wall zone for clock-anchored special breaks (⚑ Q2: the app
+        # is single-machine; UTC stays the storage currency everywhere else).
+        self._tz = tz if tz is not None else datetime.now().astimezone().tzinfo
         self._session_id = session.id if session is not None else f"session-{uuid4().hex[:12]}"
         self._slots: tuple[Slot, ...] = tuple(sorted(day_plan.slots, key=lambda s: s.sector))
         self._slot_cursor = 0
@@ -96,18 +102,40 @@ class SessionFSM:
         self._boundary_pause = False
         self._started_at: datetime | None = None
         self._stop_reason: str | None = None
+        # Anchors at/before this instant are "missed while paused" and are
+        # never applied retroactively (spec 05 GWT-B2: a pause through
+        # lunch means the lunch already happened on the user's own time).
+        self._last_resume: datetime | None = self._started_at
+        # (local day, wall time) of every special break already applied to
+        # the timeline, so the cascade cuts each anchor exactly once.
+        self._consumed_anchors: set[tuple[date, time]] = set()
 
     # ------------------------------------------------------------------ commands
 
     def start(self) -> None:
-        """Open the session: snapshot plan order, begin the first WORK."""
+        """Open the session: snapshot plan order, begin the first WORK.
+
+        warm-up (spec 01 v0.4): the day's first segment lasts warmup_min
+        (0 disables) — it is the ramp into flow, later blocks keep the
+        normal work_min rhythm.
+        """
         self._require_state(SessionState.IDLE, "start")
         self._state = SessionState.RUNNING
         self._started_at = self._now()
-        self._open_segment(SegmentPhase.WORK, self._settings.work_min, self._started_at)
+        self._last_resume = self._started_at
+        self._open_segment(SegmentPhase.WORK, self._next_work_min(), self._started_at)
 
     def pause(self) -> None:
-        """Freeze the running phase; paused wall time is excluded from work."""
+        """Freeze the running phase; paused wall time is excluded from work.
+
+        strict mode (v0.4): while RUNNING with an open WORK the freeze is
+        refused — a stop is always allowed, so the user is never trapped.
+        """
+        if self._settings.strict_mode:
+            live = self._open_segment_or_none()
+            if live is not None and live.phase is SegmentPhase.WORK:
+                msg = "pause invalid in strict mode while working"
+                raise InvalidTransitionError(msg)
         self._require_state(SessionState.RUNNING, "pause")
         self._pause_started = self._now()
         self._state = SessionState.PAUSED
@@ -117,10 +145,13 @@ class SessionFSM:
         paused wall time; a boundary pause starts the next WORK now."""
         self._require_state(SessionState.PAUSED, "resume")
         now = self._now()
+        # Paused-over anchors are consumed silently: they belong to the
+        # wall time the user already spent on their own (GWT-B2).
+        self._last_resume = now
         if self._boundary_pause:
             self._boundary_pause = False
             self._state = SessionState.RUNNING
-            self._open_segment(SegmentPhase.WORK, self._settings.work_min, now)
+            self._open_segment(SegmentPhase.WORK, self._next_work_min(), now)
             return
         live = self._open_segment_or_none()
         assert live is not None  # only reachable via pause() which requires RUNNING
@@ -158,22 +189,52 @@ class SessionFSM:
             msg = f"skip_break requires an open break, got {self._state.value}"
             raise InvalidTransitionError(msg)
         self._close(live, self._now(), SegmentStatus.COMPLETED)
-        self._open_segment(SegmentPhase.WORK, self._settings.work_min, self._now())
+        self._open_segment(SegmentPhase.WORK, self._next_work_min(), self._now())
 
     def advance(self) -> None:
-        """Apply every phase deadline that has passed (catch-up cascade)."""
+        """Apply every phase deadline that has passed (catch-up cascade).
+
+        Clock-anchored special breaks (spec 01 v0.4, spec 05 §3.3) are cut
+        into this same loop: an anchor strictly inside the open segment
+        closes it early (WORK -> INTERRUPTED, a plain break -> COMPLETED)
+        and the special segment takes the rest of the ladder. Anchors at or
+        before the last resume are never applied retroactively — time the
+        user spent paused or before the session started is their own.
+        """
         if self._state is not SessionState.RUNNING:
             return
         now = self._now()
         while self._state is SessionState.RUNNING:
             live = self._open_segment_or_none()
             assert live is not None  # RUNNING always holds exactly one open segment
+            anchor = self._crossed_anchor(live.started_at, now)
+            if anchor is not None and anchor < live.ends_at:
+                status = (
+                    SegmentStatus.INTERRUPTED
+                    if live.phase is SegmentPhase.WORK
+                    else SegmentStatus.COMPLETED
+                )
+                self._close(live, anchor, status)
+                self._open_special(self._break_at(anchor), anchor)
+                continue
             if now < live.ends_at:
                 break
             deadline = live.ends_at
             self._close(live, deadline, SegmentStatus.COMPLETED)
+            boundary = self._anchor_at(deadline)
+            if boundary is not None:
+                # Lunch landing exactly on a segment end takes the next slot
+                # instead of the scheduled break (author's clock rules).
+                self._open_special(boundary, deadline)
+                continue
             if live.phase is SegmentPhase.WORK:
                 if self._slot_cursor >= len(self._slots):
+                    trailing = self._crossed_anchor(deadline, now)
+                    if trailing is not None:
+                        # GWT-B4: the ladder is over but lunch was crossed —
+                        # it still happens, then the day completes.
+                        self._open_special(self._break_at(trailing), trailing)
+                        continue
                     self._state = SessionState.COMPLETED
                     break
                 if self._work_done() % self._settings.long_break_every == 0:
@@ -182,8 +243,13 @@ class SessionFSM:
                     )
                 else:
                     self._open_segment(SegmentPhase.BREAK, self._settings.break_min, deadline)
+            elif self._slot_cursor >= len(self._slots):
+                # Only a trailing special (B4) can end the ladder; a plain
+                # break never opens unless a WORK slot is still queued.
+                self._state = SessionState.COMPLETED
+                break
             elif self._settings.auto_start_next:
-                self._open_segment(SegmentPhase.WORK, self._settings.work_min, deadline)
+                self._open_segment(SegmentPhase.WORK, self._next_work_min(), deadline)
             else:
                 self._boundary_pause = True
                 self._state = SessionState.PAUSED
@@ -214,6 +280,7 @@ class SessionFSM:
         session: Session,
         segments: tuple[Segment, ...],
         reviews: tuple[Review, ...],
+        tz: tzinfo | None = None,
     ) -> SessionFSM:
         """Rehydrate a live FSM from persisted rows (spec 01 v0.3, spec 03 §6).
 
@@ -244,6 +311,7 @@ class SessionFSM:
         started = session.started_at
         fsm._plan = DayPlan(id=session.day_plan_id, date=started.date(), slots=tuple(ordered))
         fsm._settings = session.settings
+        fsm._tz = tz if tz is not None else datetime.now().astimezone().tzinfo
         fsm._session_id = session.id
         fsm._slots = tuple(ordered)
         fsm._segments = []
@@ -264,11 +332,21 @@ class SessionFSM:
                     paused_total=timedelta(seconds=seg.paused_sec),
                     status=seg.status,
                     ended_at=seg.ended_at,
+                    break_label=seg.break_label,
                 )
             )
         fsm._reviews = list(reviews)
         fsm._started_at = session.started_at
         fsm._stop_reason = None
+        # Special-break bookkeeping (spec 01 v0.4): anchors already present
+        # in the timeline must not be re-cut after restore; anchors before
+        # the session start belong to the user's own time.
+        fsm._last_resume = session.started_at
+        fsm._consumed_anchors = set()
+        for seg in segments:
+            if seg.phase is SegmentPhase.SPECIAL_BREAK and seg.started_at is not None:
+                local = seg.started_at.astimezone(fsm._tz)
+                fsm._consumed_anchors.add((local.date(), local.time()))
 
         open_live = fsm._open_segment_or_none()
         cursor = sum(seg.phase is SegmentPhase.WORK for seg in segments)
@@ -309,7 +387,7 @@ class SessionFSM:
             return max(timedelta(0), live.ends_at - self._now())
         if self._state is SessionState.PAUSED:
             if self._boundary_pause:
-                return timedelta(minutes=self._settings.work_min)
+                return timedelta(minutes=self._next_work_min())
             live = self._open_segment_or_none()
             assert live is not None and self._pause_started is not None
             # A pause taken while the server lags behind a passed deadline
@@ -317,7 +395,7 @@ class SessionFSM:
             # next advance closes the segment immediately — no time refund.
             return max(timedelta(0), live.ends_at - self._pause_started)
         if self._state is SessionState.IDLE:
-            return timedelta(minutes=self._settings.work_min)
+            return timedelta(minutes=self._next_work_min())
         return timedelta(0)
 
     @property
@@ -366,6 +444,59 @@ class SessionFSM:
         return live.actual_worked if live is not None else None
 
     # ------------------------------------------------------------------ internals
+
+    def _next_work_min(self) -> int:
+        """Warm-up is the day's FIRST work segment only (spec v0.4 §3.5)."""
+        has_work = any(seg.phase is SegmentPhase.WORK for seg in self._segments)
+        if not has_work and self._settings.warmup_min:
+            return self._settings.warmup_min
+        return self._settings.work_min
+
+    def _anchor_instant(self, brk: SpecialBreak, within: datetime) -> datetime:
+        """The break's wall instant on the local day containing `within`."""
+        local = within.astimezone(self._tz)
+        return datetime.combine(local.date(), brk.at, tzinfo=self._tz)
+
+    def _crossed_anchor(self, after: datetime, now: datetime) -> datetime | None:
+        """Earliest unconsumed anchor in (after, now] strictly after the last
+        resume — the next special break the cascade must honour."""
+        floor = self._last_resume
+        for brk in sorted(self._settings.special_breaks, key=lambda b: b.at):
+            instant = self._anchor_instant(brk, now)
+            if instant <= after or instant > now:
+                continue
+            if floor is not None and instant <= floor:
+                continue
+            key = (instant.astimezone(self._tz).date(), brk.at)
+            if key in self._consumed_anchors:
+                continue
+            return instant
+        return None
+
+    def _break_at(self, anchor: datetime) -> SpecialBreak:
+        local = anchor.astimezone(self._tz)
+        for brk in self._settings.special_breaks:
+            if brk.at == local.time():
+                return brk
+        msg = f"anchor {anchor} matches no configured special break"  # defensive
+        raise InvalidTransitionError(msg)
+
+    def _anchor_at(self, when: datetime) -> SpecialBreak | None:
+        """Unconsumed special break whose wall anchor equals `when` exactly."""
+        if self._last_resume is not None and when <= self._last_resume:
+            return None
+        local = when.astimezone(self._tz)
+        for brk in self._settings.special_breaks:
+            if brk.at == local.time() and (local.date(), brk.at) not in self._consumed_anchors:
+                return brk
+        return None
+
+    def _open_special(self, brk: SpecialBreak, start_at: datetime) -> _Live:
+        local = start_at.astimezone(self._tz)
+        self._consumed_anchors.add((local.date(), local.time()))
+        live = self._open_segment(SegmentPhase.SPECIAL_BREAK, brk.duration_min, start_at)
+        live.break_label = brk.label
+        return live
 
     def _require_state(self, expected: SessionState, cmd: str) -> None:
         if self._state is not expected:
@@ -419,4 +550,5 @@ class SessionFSM:
             ended_at=live.ended_at,
             status=live.status,
             paused_sec=int(live.paused_total.total_seconds()),
+            break_label=live.break_label,
         )

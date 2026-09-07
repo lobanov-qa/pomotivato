@@ -122,6 +122,7 @@ class SegmentRepository:
                 "ended_at": row.ended_at,
                 "status": row.status,
                 "paused_sec": row.paused_sec,
+                "break_label": row.break_label,
             }
         )
 
@@ -138,6 +139,7 @@ class SegmentRepository:
                     ended_at=_iso(segment.ended_at),
                     status=segment.status.value if segment.status else None,
                     paused_sec=segment.paused_sec,
+                    break_label=segment.break_label,
                 )
             )
 
@@ -160,6 +162,7 @@ class SegmentRepository:
                     "ended_at": row.ended_at,
                     "status": row.status,
                     "paused_sec": row.paused_sec,
+                    "break_label": row.break_label,
                 }
             )
             for row in rows

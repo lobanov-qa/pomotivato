@@ -6,6 +6,8 @@ error kind instead of parsing messages.
 
 from __future__ import annotations
 
+from datetime import time
+
 from pomotivato.core.errors import (
     DayPlanValidationError,
     RecurrenceValidationError,
@@ -35,6 +37,11 @@ TITLE_MAX_LEN = 200
 _MINUTES_RANGE = range(1, 241)
 _LONG_BREAK_EVERY_RANGE = range(2, 7)
 _SCORE_RANGE = range(1, 6)
+# E4b modes (spec 01 v0.4): V12/V13 bounds.
+_WARMUP_RANGE = range(0, 31)
+_SPECIAL_DURATION_RANGE = range(5, 121)
+_SPECIAL_LABEL_MAX_LEN = 40
+MAX_SPECIAL_BREAKS = 3
 
 # V7 allowed kanban transitions; DONE -> DOING is rework (author spec).
 _ALLOWED_TRANSITIONS: dict[TaskStatus, frozenset[TaskStatus]] = {
@@ -95,6 +102,25 @@ def validate_settings(settings: SessionSettings) -> None:
     if settings.long_break_every not in _LONG_BREAK_EVERY_RANGE:
         msg = f"long_break_every must be 2..6, got {settings.long_break_every}"
         raise SettingsValidationError(msg)
+    # V12/V13 (spec 01 v0.4, E4b modes).
+    if settings.warmup_min not in _WARMUP_RANGE:
+        msg = f"warmup_min must be 0..30, got {settings.warmup_min}"
+        raise SettingsValidationError(msg)
+    if len(settings.special_breaks) > MAX_SPECIAL_BREAKS:
+        msg = f"at most {MAX_SPECIAL_BREAKS} special breaks, got {len(settings.special_breaks)}"
+        raise SettingsValidationError(msg)
+    seen_times: set[time] = set()
+    for brk in settings.special_breaks:
+        if brk.duration_min not in _SPECIAL_DURATION_RANGE:
+            msg = f"special break duration must be 5..120, got {brk.duration_min}"
+            raise SettingsValidationError(msg)
+        if len(brk.label) > _SPECIAL_LABEL_MAX_LEN:
+            msg = f"special break label exceeds {_SPECIAL_LABEL_MAX_LEN} chars"
+            raise SettingsValidationError(msg)
+        if brk.at in seen_times:
+            msg = f"duplicate special break time: {brk.at}"
+            raise SettingsValidationError(msg)
+        seen_times.add(brk.at)
 
 
 def validate_day_plan(plan: DayPlan, tasks: dict[str, Task]) -> None:

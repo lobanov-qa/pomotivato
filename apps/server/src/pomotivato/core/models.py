@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from datetime import date, datetime
+from datetime import date, datetime, time
 from enum import StrEnum
 from typing import Any
 
@@ -36,6 +36,9 @@ class SegmentPhase(StrEnum):
     WORK = "work"
     BREAK = "break"
     LONG_BREAK = "long_break"
+    # Spec 01 v0.4 (E4b): a clock-anchored break (lunch/dinner) that cuts
+    # whatever is open; it never slides when the timer is paused.
+    SPECIAL_BREAK = "special_break"
 
 
 class SegmentStatus(StrEnum):
@@ -119,12 +122,32 @@ class DayPlan:
 
 
 @dataclass(frozen=True, slots=True)
+class SpecialBreak:
+    """One clock-anchored break (spec 01 v0.4, E4b §3.3): lunch/dinner.
+
+    ``at`` is local wall time (the app is single-machine, author's ⚑ Q2);
+    ``HH:MM`` is the wire form so settings_json stays human-editable.
+    """
+
+    at: time
+    duration_min: int
+    label: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class SessionSettings:
     work_min: int = 25
     break_min: int = 5
     long_break_min: int = 15
     long_break_every: int = 4
     auto_start_next: bool = True
+    # E4b modes (spec 05 §3.3-§3.5); all additive: legacy settings_json
+    # rows must keep loading through the from_dict defaults. warm-up ships
+    # OFF (0): the E3 rhythm users memorized must not change silently —
+    # the settings UI offers 5 min as the recommended value.
+    strict_mode: bool = False
+    warmup_min: int = 0
+    special_breaks: tuple[SpecialBreak, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,6 +163,9 @@ class Segment:
     # Wall time frozen by pauses while the segment was open (spec 01 v0.3);
     # the deadline invariant started+planned+paused == ends_at holds always.
     paused_sec: int = 0
+    # Human label of a SPECIAL_BREAK segment ("обед"); None for all phases
+    # that are not special (spec 01 v0.4; additive migration E4b).
+    break_label: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -185,6 +211,8 @@ def to_dict(obj: Any) -> dict[str, Any]:
 def _jsonify(value: Any) -> Any:
     if isinstance(value, StrEnum):
         return value.value
+    if isinstance(value, time):
+        return value.isoformat(timespec="minutes")
     if isinstance(value, date | datetime):
         return value.isoformat()
     if isinstance(value, Mapping):
@@ -309,6 +337,24 @@ def day_plan_from_dict(data: Mapping[str, Any]) -> DayPlan:
     )
 
 
+def _parse_time(raw: Any, field_name: str) -> time:
+    if isinstance(raw, time):
+        return raw
+    try:
+        return time.fromisoformat(str(raw))
+    except ValueError as err:
+        msg = f"bad {field_name} time: {raw!r}"
+        raise ValidationError(msg) from err
+
+
+def special_break_from_dict(data: Mapping[str, Any]) -> SpecialBreak:
+    return SpecialBreak(
+        at=_parse_time(_require(data, "at"), "at"),
+        duration_min=int(_require(data, "duration_min")),
+        label=str(data.get("label", "")),
+    )
+
+
 def session_settings_from_dict(data: Mapping[str, Any]) -> SessionSettings:
     return SessionSettings(
         work_min=int(_require(data, "work_min")),
@@ -316,6 +362,10 @@ def session_settings_from_dict(data: Mapping[str, Any]) -> SessionSettings:
         long_break_min=int(_require(data, "long_break_min")),
         long_break_every=int(_require(data, "long_break_every")),
         auto_start_next=bool(_require(data, "auto_start_next")),
+        # E4b additions: defaults keep pre-E4b settings_json rows loadable.
+        strict_mode=bool(data.get("strict_mode", False)),
+        warmup_min=int(data.get("warmup_min", 0)),
+        special_breaks=tuple(special_break_from_dict(b) for b in data.get("special_breaks", ())),
     )
 
 
@@ -331,6 +381,7 @@ def segment_from_dict(data: Mapping[str, Any]) -> Segment:
         ended_at=_opt(data.get("ended_at"), lambda r: _parse_dt(r, "ended_at")),
         status=_opt(raw_status, lambda r: _enum(SegmentStatus, r, "status")),
         paused_sec=int(data.get("paused_sec", 0)),
+        break_label=data.get("break_label"),
     )
 
 

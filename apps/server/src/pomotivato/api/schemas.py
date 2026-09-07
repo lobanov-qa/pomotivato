@@ -6,10 +6,10 @@ types; every business rule stays in pomotivato.core validators (DRY).
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from pomotivato.core.models import (
     DayPlan,
@@ -17,6 +17,7 @@ from pomotivato.core.models import (
     Segment,
     SessionSettings,
     Slot,
+    SpecialBreak,
     Task,
     TaskStatus,
     TaskType,
@@ -169,6 +170,9 @@ class SegmentDto(BaseModel):
     started_at: str | None
     ended_at: str | None
     status: str | None
+    # E4b special breaks: label of a SPECIAL_BREAK segment, None otherwise
+    # (additive mirror of core Segment).
+    break_label: str | None = None
 
     @classmethod
     def from_core(cls, segment: Segment) -> SegmentDto:
@@ -235,12 +239,29 @@ class SessionDto(BaseModel):
         )
 
 
+class SpecialBreakDto(BaseModel):
+    """One clock-anchored break row (spec 05 §3.3; wire form HH:MM, same
+    canonical as core _jsonify, so settings round-trips are byte-stable)."""
+
+    at: time
+    duration_min: int = Field(ge=5, le=120)
+    label: str = ""
+
+    @field_serializer("at")
+    def _serialize_at(self, value: time) -> str:
+        return value.isoformat(timespec="minutes")
+
+
 class SessionSettingsDto(BaseModel):
     work_min: int = 25
     break_min: int = 5
     long_break_min: int = 15
     long_break_every: int = 4
     auto_start_next: bool = True
+    # E4b modes (spec 01 v0.4) — additive, defaults mirror core.
+    strict_mode: bool = False
+    warmup_min: int = Field(default=0, ge=0, le=30)
+    special_breaks: list[SpecialBreakDto] = Field(default_factory=list)
 
     def to_core(self) -> SessionSettings:
         return SessionSettings(
@@ -249,6 +270,12 @@ class SessionSettingsDto(BaseModel):
             long_break_min=self.long_break_min,
             long_break_every=self.long_break_every,
             auto_start_next=self.auto_start_next,
+            strict_mode=self.strict_mode,
+            warmup_min=self.warmup_min,
+            special_breaks=tuple(
+                SpecialBreak(at=b.at, duration_min=b.duration_min, label=b.label)
+                for b in self.special_breaks
+            ),
         )
 
     @classmethod
