@@ -18,6 +18,7 @@ from pomotivato.core.models import (
     SessionSettings,
     Slot,
     SpecialBreak,
+    Sprint,
     Task,
     TaskStatus,
     TaskType,
@@ -328,3 +329,42 @@ class DailySummaryDto(BaseModel):
     average_score: float | None
     reviews_count: int
     tasks_done: int
+
+
+class SprintCreateDto(BaseModel):
+    """POST /api/sprints body (spec 05 §3.10): number is server-assigned."""
+
+    name: str | None = None
+    goal: str | None = None
+    done_criteria: str | None = None
+    start_date: date
+    end_date: date
+
+
+class SprintPatchDto(BaseModel):
+    """PATCH /api/sprints/{id}: texts/period/status; number and id immutable."""
+
+    name: str | None = None
+    goal: str | None = None
+    done_criteria: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    status: Literal["planned", "active", "completed"] | None = None
+
+    def changes(self) -> dict[str, Any]:
+        return self.model_dump(exclude_unset=True)
+
+
+class SprintDto(BaseModel):
+    id: str
+    number: int
+    name: str | None
+    start_date: str
+    end_date: str
+    goal: str | None
+    done_criteria: str | None
+    status: str
+
+    @classmethod
+    def from_core(cls, sprint: Sprint) -> SprintDto:
+        return cls(**to_dict(sprint))

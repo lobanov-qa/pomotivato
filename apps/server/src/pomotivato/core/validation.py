@@ -16,6 +16,7 @@ from pomotivato.core.errors import (
     SettingsValidationError,
     StatusTransitionError,
     TaskValidationError,
+    ValidationError,
 )
 from pomotivato.core.models import (
     MAX_SECTOR,
@@ -26,6 +27,8 @@ from pomotivato.core.models import (
     Review,
     SessionSettings,
     Slot,
+    Sprint,
+    SprintStatus,
     Task,
     TaskStatus,
     WeeklyCount,
@@ -42,6 +45,16 @@ _WARMUP_RANGE = range(0, 31)
 _SPECIAL_DURATION_RANGE = range(5, 121)
 _SPECIAL_LABEL_MAX_LEN = 40
 MAX_SPECIAL_BREAKS = 3
+# Sprints (spec 05 §3.10 / ADR-0003 p.3): V14/V15 bounds.
+SPRINT_MAX_DAYS = 14
+SPRINT_TEXT_MAX_LEN = 200
+
+# V15 allowed sprint transitions: one-way, completed is terminal.
+_SPRINT_TRANSITIONS: dict[SprintStatus, frozenset[SprintStatus]] = {
+    SprintStatus.PLANNED: frozenset({SprintStatus.ACTIVE}),
+    SprintStatus.ACTIVE: frozenset({SprintStatus.COMPLETED}),
+    SprintStatus.COMPLETED: frozenset(),
+}
 
 # V7 allowed kanban transitions; DONE -> DOING is rework (author spec).
 _ALLOWED_TRANSITIONS: dict[TaskStatus, frozenset[TaskStatus]] = {
@@ -167,6 +180,29 @@ def validate_status_transition(old: TaskStatus, new: TaskStatus) -> None:
     if new not in _ALLOWED_TRANSITIONS[old]:
         msg = f"illegal status transition {old.value} -> {new.value}"
         raise StatusTransitionError(msg)
+
+
+def validate_sprint(sprint: Sprint) -> None:
+    """Check V14: period length 1..14 days, number ≥1, optional fields sized."""
+    if sprint.number < 1:
+        msg = f"sprint number must be >= 1, got {sprint.number}"
+        raise ValidationError(msg)
+    length = (sprint.end_date - sprint.start_date).days + 1
+    if not 1 <= length <= SPRINT_MAX_DAYS:
+        msg = f"sprint must span 1..{SPRINT_MAX_DAYS} days, got {length}"
+        raise ValidationError(msg)
+    for field_name in ("name", "goal", "done_criteria"):
+        value = getattr(sprint, field_name)
+        if value is not None and len(value) > SPRINT_TEXT_MAX_LEN:
+            msg = f"{field_name} exceeds {SPRINT_TEXT_MAX_LEN} characters"
+            raise ValidationError(msg)
+
+
+def validate_sprint_transition(old: SprintStatus, new: SprintStatus) -> None:
+    """Check V15: planned->active->completed, no shortcuts, no re-open."""
+    if new not in _SPRINT_TRANSITIONS[old]:
+        msg = f"illegal sprint status transition {old.value} -> {new.value}"
+        raise ValidationError(msg)
 
 
 def validate_planning_ready(task: Task, require_science_fields: bool) -> None:

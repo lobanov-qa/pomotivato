@@ -199,6 +199,30 @@ class RepetitionState:
     next_due: date
 
 
+class SprintStatus(StrEnum):
+    PLANNED = "planned"
+    ACTIVE = "active"
+    COMPLETED = "completed"
+
+
+@dataclass(frozen=True, slots=True)
+class Sprint:
+    """Thin named period (ADR-0003 p.3): 1..14 days, ≤1 active, no overlap.
+
+    Tasks belong to a sprint by being scheduled inside its dates — there is
+    deliberately no sprint_id on tasks (scope guard: no Scrum ceremonies).
+    """
+
+    id: str
+    number: int
+    start_date: date
+    end_date: date
+    status: SprintStatus = SprintStatus.PLANNED
+    name: str | None = None
+    goal: str | None = None
+    done_criteria: str | None = None
+
+
 def to_dict(obj: Any) -> dict[str, Any]:
     """Serialize a core model to JSON-friendly plain values.
 
@@ -417,4 +441,17 @@ def repetition_state_from_dict(data: Mapping[str, Any]) -> RepetitionState:
         task_id=str(_require(data, "task_id")),
         interval_idx=int(_require(data, "interval_idx")),
         next_due=_parse_date(_require(data, "next_due"), "next_due"),
+    )
+
+
+def sprint_from_dict(data: Mapping[str, Any]) -> Sprint:
+    return Sprint(
+        id=str(_require(data, "id")),
+        number=int(_require(data, "number")),
+        start_date=_parse_date(_require(data, "start_date"), "start_date"),
+        end_date=_parse_date(_require(data, "end_date"), "end_date"),
+        status=_enum(SprintStatus, data.get("status", "planned"), "status"),
+        name=data.get("name"),
+        goal=data.get("goal"),
+        done_criteria=data.get("done_criteria"),
     )

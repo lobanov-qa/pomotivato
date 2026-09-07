@@ -11,20 +11,23 @@ import json
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pomotivato.core.models import (
     DayPlan,
+    Sprint,
+    SprintStatus,
     Task,
     TaskStatus,
     TaskType,
     day_plan_from_dict,
     recurrence_to_dict,
+    sprint_from_dict,
     task_from_dict,
     to_dict,
 )
-from pomotivato.infra.orm import DayPlanRow, SettingRow, TaskRow
+from pomotivato.infra.orm import DayPlanRow, SettingRow, SprintRow, TaskRow
 
 
 def _iso(value: date | datetime | None) -> str | None:
@@ -190,3 +193,86 @@ class SettingRepository:
 
     async def set(self, key: str, value: str) -> None:
         await self._session.merge(SettingRow(key=key, value=value))
+
+
+def _sprint_to_row(sprint: Sprint) -> SprintRow:
+    return SprintRow(
+        id=sprint.id,
+        number=sprint.number,
+        name=sprint.name,
+        start_date=sprint.start_date.isoformat(),
+        end_date=sprint.end_date.isoformat(),
+        goal=sprint.goal,
+        done_criteria=sprint.done_criteria,
+        status=sprint.status.value,
+    )
+
+
+def _sprint_from_row(row: SprintRow) -> Sprint:
+    return sprint_from_dict(
+        {
+            "id": row.id,
+            "number": row.number,
+            "name": row.name,
+            "start_date": row.start_date,
+            "end_date": row.end_date,
+            "goal": row.goal,
+            "done_criteria": row.done_criteria,
+            "status": row.status,
+        }
+    )
+
+
+class SprintRepository:
+    """Persistence for the sprints table (ADR-0003 p.3).
+
+    Dates are ISO TEXT, so overlap is plain lexicographic comparison:
+    intervals [a,b] and [c,d] intersect iff a <= d and c <= b.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def add(self, sprint: Sprint) -> None:
+        self._session.add(_sprint_to_row(sprint))
+
+    async def put(self, sprint: Sprint) -> None:
+        await self._session.merge(_sprint_to_row(sprint))
+
+    async def get(self, sprint_id: str) -> Sprint | None:
+        row = await self._session.get(SprintRow, sprint_id)
+        return None if row is None else _sprint_from_row(row)
+
+    async def list(self) -> tuple[Sprint, ...]:
+        stmt = select(SprintRow).order_by(SprintRow.number.desc())
+        rows = await self._session.scalars(stmt)
+        return tuple(_sprint_from_row(row) for row in rows)
+
+    async def max_number(self) -> int:
+        stmt = select(func.max(SprintRow.number))
+        current = await self._session.scalar(stmt)
+        return int(current or 0)
+
+    async def get_active(self) -> Sprint | None:
+        stmt = select(SprintRow).where(SprintRow.status == SprintStatus.ACTIVE.value)
+        row = await self._session.scalars(stmt)
+        found = row.first()
+        return None if found is None else _sprint_from_row(found)
+
+    async def overlapping(
+        self, start: date, end: date, exclude_id: str | None = None
+    ) -> tuple[Sprint, ...]:
+        """Open sprints (planned/active) whose period touches [start, end].
+
+        Completed sprints are history: ADR-0003 lets a new period overlap
+        them (⚑ Q9, author-approved 07.09).
+        """
+        stmt = select(SprintRow).where(
+            SprintRow.status != SprintStatus.COMPLETED.value,
+            SprintRow.start_date <= end.isoformat(),
+            SprintRow.end_date >= start.isoformat(),
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(SprintRow.id != exclude_id)
+        rows = await self._session.scalars(stmt)
+        return tuple(_sprint_from_row(row) for row in rows)
