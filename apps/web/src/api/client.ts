@@ -105,6 +105,42 @@ export interface DailySummaryDto {
   tasks_done: number;
 }
 
+/* Stats/week DTOs live in ./types_stats (300-line split). Imported for
+ * method signatures and re-exported so existing `from "./api/client"`
+ * paths keep working (E3 lesson: aliases on Cyrillic paths are fragile). */
+import type { StatsDto, WeekDto } from "./types_stats";
+
+export type {
+  ChartLabels,
+  DaySlotDto,
+  DaySummaryDto,
+  EstimateVsFactDto,
+  FactPointDto,
+  GoalDepthRowDto,
+  HeatmapCellDto,
+  ParentProgressDto,
+  PlannedDto,
+  QuadrantKey,
+  QuadrantRowDto,
+  StatsDto,
+  StatsPeriodDto,
+  StatsTotalsDto,
+  StreakDto,
+  WeekDayDto,
+  WeekDto,
+  ZombieItemDto,
+  ZombiesDto,
+} from "./types_stats";
+
+/** Export endpoint answers files, not JSON (spec 04 §4.3); default window
+ * is server-side, so empty params mean "last 30 days" on the wire too. */
+export function exportUrl(format: "json" | "csv", from?: string, to?: string): string {
+  const params = new URLSearchParams({ format });
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  return `/api/export?${params.toString()}`;
+}
+
 /** Stable error codes from the server envelope detail.code (spec 02 §5). */
 export class ApiError extends Error {
   constructor(
@@ -179,4 +215,17 @@ export const api = {
 
   getStatus: () => request<StatusDto>("GET", "/api/status"),
   getSummary: (date: string) => request<DailySummaryDto>("GET", `/api/summary/${date}`),
+
+  getStats: (from?: string, to?: string) => {
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    const query = params.toString();
+    return request<StatsDto>("GET", `/api/stats${query ? `?${query}` : ""}`);
+  },
+  getWeek: (start?: string, days = 7) => {
+    const params = new URLSearchParams({ days: String(days) });
+    if (start) params.set("start", start);
+    return request<WeekDto>("GET", `/api/week?${params.toString()}`);
+  },
 };
