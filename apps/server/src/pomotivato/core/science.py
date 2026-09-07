@@ -12,13 +12,17 @@ import math
 from datetime import date, timedelta
 
 from pomotivato.core.errors import ValidationError
-from pomotivato.core.models import RepetitionState
+from pomotivato.core.models import RepetitionState, Task, TaskStatus
 
 # Review gaps per spec: 1, 3, 7, 14, 30 days after the previous recall.
 SPACED_INTERVALS_DAYS: tuple[int, ...] = (1, 3, 7, 14, 30)
 
 LAST_INTERVAL_IDX = len(SPACED_INTERVALS_DAYS) - 1
 DEFAULT_BUFFER_RATIO = 0.25
+
+# frog-first (spec 05 §3.9): a task counts as a "frog" only from this size;
+# tie-break prefers quadrant II (important, not urgent), then the oldest.
+FROG_MIN_BLOCKS = 3
 
 
 def advance_repetition(state: RepetitionState, today: date) -> RepetitionState:
@@ -58,3 +62,30 @@ def recommended_start(
     padded = math.ceil(estimate_blocks * (1 + buffer_ratio))
     days_needed = max(padded, estimate_blocks + 1)
     return deadline - timedelta(days=days_needed)
+
+
+def frog_candidate(tasks: tuple[Task, ...]) -> Task | None:
+    """Pick today's "eat the frog" candidate among open tasks (spec 05 §3.9).
+
+    Done/archived tasks and small tasks (< FROG_MIN_BLOCKS) are out; the
+    biggest estimate wins, ties break toward quadrant II (important and not
+    urgent) and then toward the oldest creation date. Pure suggestion:
+    nothing reorders the plan automatically (author's "hint, not tyranny").
+    """
+    open_tasks = [
+        task
+        for task in tasks
+        if task.status not in (TaskStatus.DONE, TaskStatus.ARCHIVED)
+        and task.estimate_blocks >= FROG_MIN_BLOCKS
+    ]
+    if not open_tasks:
+        return None
+    # Quadrant II sorts first: key = (not quadrant-II, -size, created_at).
+    return min(
+        open_tasks,
+        key=lambda t: (
+            not (t.important and not t.urgent),
+            -t.estimate_blocks,
+            t.created_at,
+        ),
+    )

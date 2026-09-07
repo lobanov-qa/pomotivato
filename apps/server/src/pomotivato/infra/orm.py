@@ -72,6 +72,8 @@ class SegmentRow(Base):
     status: Mapped[str | None] = mapped_column(Text)
     # E3 restore: wall time frozen by pauses while this segment was open.
     paused_sec: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # E4b special breaks (spec 01 v0.4): label of a SPECIAL_BREAK segment.
+    break_label: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class ReviewRow(Base):

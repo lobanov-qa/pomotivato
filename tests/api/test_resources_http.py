@@ -201,6 +201,9 @@ def test_settings_roundtrip_and_v5_rejection(http_app):
             "long_break_min": 15,
             "long_break_every": 4,
             "auto_start_next": True,
+            "strict_mode": False,
+            "warmup_min": 0,
+            "special_breaks": [],
         },
         "ui": {"max_in_work": 6, "theme": "auto"},
     }

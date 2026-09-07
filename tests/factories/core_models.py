@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from itertools import count
 from typing import Any
 
@@ -19,6 +19,7 @@ from pomotivato.core.models import (
     SessionSettings,
     SessionState,
     Slot,
+    SpecialBreak,
     Task,
     TaskStatus,
     TaskType,
@@ -61,6 +62,12 @@ def settings_factory(**overrides: Any) -> SessionSettings:
     }
     args.update(overrides)
     return SessionSettings(**args)
+
+
+def special_break_factory(**overrides: Any) -> SpecialBreak:
+    args: dict[str, Any] = {"at": time(13, 0), "duration_min": 30, "label": "lunch"}
+    args.update(overrides)
+    return SpecialBreak(**args)
 
 
 def slot_factory(**overrides: Any) -> Slot:

@@ -106,3 +106,26 @@ def test_rejected_commands_are_noops(steps, cmd):  # P7 / I4
         getattr(fsm, cmd)()
     except InvalidTransitionError:
         assert fsm.snapshot() == before
+
+
+@settings(max_examples=60, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(deltas=st.lists(st.integers(min_value=0, max_value=50), min_size=2, max_size=8))
+def test_anchor_catchup_advance_equals_stepwise_drive(deltas):  # P3 / v0.4 special breaks
+    # Adding one clock-anchored break to the same command stream must stay
+    # confluent: whether the cascade is cut in one giant advance or many
+    # small ones, the timeline is identical.
+    from .test_fsm_modes import make_lunch_fsm
+
+    def driven_by(steps: list[int]) -> SessionFSM:
+        fsm, clock = make_lunch_fsm(n_slots=4)
+        fsm.start()
+        for minutes in steps:
+            clock.advance(timedelta(minutes=minutes))
+            fsm.advance()
+        return fsm
+
+    big = driven_by([sum(deltas)])
+    stepwise = driven_by(deltas)
+
+    assert shape_of(big) == shape_of(stepwise)
+    assert big.state == stepwise.state
