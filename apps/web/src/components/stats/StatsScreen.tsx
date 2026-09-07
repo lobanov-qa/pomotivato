@@ -7,7 +7,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
-import { api } from "@/api/client";
+import { api, exportUrl } from "@/api/client";
 import { Chart } from "@/features/stats/Chart";
 import {
   estimateVsFactOption,
@@ -131,6 +131,20 @@ export function StatsScreen() {
     <section className="mx-auto w-full max-w-4xl space-y-4" data-testid="stats.screen">
       <header className="flex flex-wrap items-center gap-3">
         <h1 className="mr-auto text-lg font-bold">{t("stats.title")}</h1>
+        <a
+          href={exportUrl("json", from, to)}
+          data-testid="stats.export-json"
+          className="rounded-md border bg-card px-3 py-1 text-sm hover:bg-muted"
+        >
+          {t("stats.export-json")}
+        </a>
+        <a
+          href={exportUrl("csv", from, to)}
+          data-testid="stats.export-csv"
+          className="rounded-md border bg-card px-3 py-1 text-sm hover:bg-muted"
+        >
+          {t("stats.export-csv")}
+        </a>
         <div className="flex gap-1" role="group" aria-label={t("stats.title")}>
           {(["week", "month"] as const).map((value) => (
             <button

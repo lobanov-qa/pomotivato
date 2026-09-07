@@ -177,6 +177,19 @@ describe("StatsScreen", () => {
     expect(last).toContain("to=");
   });
 
+  it("links export buttons to the endpoint with the current period", async () => {
+    mockFetch(statsFixture());
+
+    renderScreen();
+    await waitFor(() => expect(screen.getByTestId("stats.export-json")).toBeInTheDocument());
+
+    const json = screen.getByTestId("stats.export-json");
+    const csv = screen.getByTestId("stats.export-csv");
+    expect(json).toHaveAttribute("href", expect.stringContaining("/api/export?format=json"));
+    expect(json).toHaveAttribute("href", expect.stringContaining("from="));
+    expect(csv).toHaveAttribute("href", expect.stringContaining("format=csv"));
+  });
+
   it("renders the em-dash when the period has no reviews", async () => {
     mockFetch(
       statsFixture({
