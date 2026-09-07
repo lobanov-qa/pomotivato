@@ -94,6 +94,21 @@ class RepetitionRow(Base):
     next_due: Mapped[str] = mapped_column(Text)
 
 
+class SprintRow(Base):
+    __tablename__ = "sprints"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    # Server-assigned sequence (max+1); unique so /week labels never repeat.
+    number: Mapped[int] = mapped_column(Integer, unique=True)
+    name: Mapped[str | None] = mapped_column(Text)
+    # ISO dates as TEXT: chronological == lexicographic (tasks.created_at law).
+    start_date: Mapped[str] = mapped_column(Text)
+    end_date: Mapped[str] = mapped_column(Text)
+    goal: Mapped[str | None] = mapped_column(Text)
+    done_criteria: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text)
+
+
 class SettingRow(Base):
     __tablename__ = "settings"
 
