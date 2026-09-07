@@ -111,6 +111,11 @@ class TaskRepository:
         rows = await self._session.scalars(stmt)
         return tuple(_task_from_row(row) for row in rows)
 
+    async def list_all(self) -> tuple[Task, ...]:
+        """All tasks (dashboard scans are desktop-scale, spec 04 §4)."""
+        rows = await self._session.scalars(select(TaskRow).order_by(TaskRow.id))
+        return tuple(_task_from_row(row) for row in rows)
+
     async def has_children(self, task_id: str) -> bool:
         stmt = select(TaskRow.id).where(TaskRow.parent_id == task_id).limit(1)
         child_id = await self._session.scalar(stmt)

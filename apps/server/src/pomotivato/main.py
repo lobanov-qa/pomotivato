@@ -23,6 +23,7 @@ from pomotivato.api.routers import (
     session_events,
     sessions,
     settings,
+    stats,
     status,
     tasks,
 )
@@ -82,6 +83,7 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     app.include_router(reviews.router)
     app.include_router(status.status_router)
     app.include_router(status.summary_router)
+    app.include_router(stats.router)
     app.get("/health")(health)
 
     # One process serves UI + API: if the frontend has been built next to

@@ -72,6 +72,12 @@ class SessionRepository:
         rows = list(await self._session.scalars(stmt))
         return tuple(self._from_row(row) for row in rows)
 
+    async def list_all(self) -> tuple[Session, ...]:
+        """Every persisted session, oldest first (stats period scan)."""
+        stmt = select(SessionRow).order_by(SessionRow.started_at, SessionRow.id)
+        rows = await self._session.scalars(stmt)
+        return tuple(self._from_row(row) for row in rows)
+
     async def mark_stopped(self, session_id: str, reason: str = "server_restart") -> None:
         """Q4 legacy path: force a live row to stopped without touching FSM."""
         row = await self._session.get(SessionRow, session_id)
