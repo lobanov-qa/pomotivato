@@ -7,6 +7,8 @@ breaking change.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -94,3 +96,44 @@ class StatsDto(BaseModel):
     goal_depth: list[GoalDepthRowDto]
     parents: list[ParentProgressDto]
     zombies: ZombiesDto
+
+
+class DaySummaryDto(BaseModel):
+    blocks_done: int
+    focus_min: int
+    average_score: float | None
+    tasks_done: int
+
+
+class DaySlotDto(BaseModel):
+    sector: int
+    task_id: str
+    task_title: str
+    status: str
+    last_score: int | None
+
+
+class PlannedDto(BaseModel):
+    task_id: str
+    title: str
+    type: str
+
+
+class WeekDayDto(BaseModel):
+    """One browser cell: past days carry the truth, future carry recurrence
+    (spec 04 §4.2). kind is the discriminator, not a display string."""
+
+    date: str
+    weekday: int
+    kind: Literal["past", "future"]
+    summary: DaySummaryDto | None = None
+    slots: list[DaySlotDto] | None = None
+    planned: list[PlannedDto] | None = None
+    slots_count: int | None = None
+    volume: int
+
+
+class WeekDto(BaseModel):
+    start: str
+    days: int
+    items: list[WeekDayDto]

@@ -26,6 +26,7 @@ from pomotivato.api.routers import (
     stats,
     status,
     tasks,
+    week,
 )
 from pomotivato.core.clock import SystemClock
 from pomotivato.infra.db import Database, default_db_path
@@ -84,6 +85,7 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     app.include_router(status.status_router)
     app.include_router(status.summary_router)
     app.include_router(stats.router)
+    app.include_router(week.router)
     app.get("/health")(health)
 
     # One process serves UI + API: if the frontend has been built next to
