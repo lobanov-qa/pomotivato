@@ -127,6 +127,8 @@ const RU = {
   "stats.estimate": "оценка",
   "stats.actual": "факт",
   "stats.tasks": "задач",
+  "stats.tasks-total": "всего задач",
+  "stats.zombie-days": "дн. без блоков",
   "stats.done-ratio": "закрыто, доля",
   "stats.weekdays": "Пн,Вт,Ср,Чт,Пт,Сб,Вс",
   "stats.months": "янв,фев,мар,апр,май,июн,июл,авг,сен,окт,ноя,дек",

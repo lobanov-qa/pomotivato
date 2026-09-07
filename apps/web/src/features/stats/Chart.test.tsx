@@ -1,7 +1,7 @@
 /**
  * Vitest smoke for the thin Chart host + theme reader. echarts is mocked:
  * jsdom has no canvas, and we only pin ownership (init/dispose/setOption),
- * not library internals.
+ * not library internals. matchMedia/ResizeObserver come from test/setup.ts.
  */
 
 import { render, screen } from "@testing-library/react";
@@ -29,14 +29,6 @@ beforeEach(() => {
   initMock.mockClear();
   setOptionMock.mockClear();
   disposeMock.mockClear();
-  // jsdom lacks ResizeObserver; the component only needs it to exist.
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      observe() {}
-      disconnect() {}
-    }
-  );
 });
 
 describe("Chart", () => {

@@ -23,6 +23,7 @@ function routes() {
         children: [
           { index: true, element: <Stub id="stub.tasks" /> },
           { path: "focus", element: <Stub id="stub.focus" /> },
+          { path: "stats", element: <Stub id="stub.stats" /> },
           { path: "settings", element: <Stub id="stub.settings" /> },
         ],
       },
@@ -32,12 +33,13 @@ function routes() {
 }
 
 describe("app shell", () => {
-  it("renders the brand and three nav links", () => {
+  it("renders the brand and four nav links", () => {
     render(<RouterProvider router={routes()} />);
 
     expect(screen.getByTestId("nav.brand")).toHaveTextContent("Pomotivato");
     expect(screen.getByTestId("nav.tasks-link")).toHaveTextContent("Задачи");
     expect(screen.getByTestId("nav.focus-link")).toHaveTextContent("Фокус");
+    expect(screen.getByTestId("nav.stats-link")).toHaveTextContent("Статистика");
     expect(screen.getByTestId("nav.settings-link")).toHaveTextContent("Настройки");
   });
 
@@ -47,6 +49,9 @@ describe("app shell", () => {
 
     await user.click(screen.getByTestId("nav.focus-link"));
     expect(screen.getByTestId("stub.focus")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("nav.stats-link"));
+    expect(screen.getByTestId("stub.stats")).toBeInTheDocument();
 
     await user.click(screen.getByTestId("nav.settings-link"));
     expect(screen.getByTestId("stub.settings")).toBeInTheDocument();

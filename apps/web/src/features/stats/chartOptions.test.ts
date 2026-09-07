@@ -132,10 +132,11 @@ describe("quadrantsOption", () => {
       { key: "urgent_not_important" as const, tasks_done: 0, blocks: 0, average_score: null },
       { key: "neither" as const, tasks_done: 4, blocks: 8, average_score: 2 },
     ];
+    const names = ["Важно и срочно", "Важно · не срочно", "Срочно · не важно", "Пустота"];
 
-    const option = quadrantsOption(rows, THEME);
+    const option = quadrantsOption(rows, THEME, names);
 
-    expect(option.yAxis.data).toEqual(rows.map((row) => row.key));
+    expect(option.yAxis.data).toEqual(names);
     expect(option.series[0].data.map((d: { value: number }) => d.value)).toEqual([5, 3, 0, 8]);
     const colors = option.series[0].data.map((d: { itemStyle: { color: string } }) => d.itemStyle.color);
     expect(new Set(colors)).toEqual(new Set([THEME.work, THEME.break]));

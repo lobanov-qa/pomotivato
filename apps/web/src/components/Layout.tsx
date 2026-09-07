@@ -29,6 +29,9 @@ export default function Layout() {
           <NavLink to="/focus" className={LINK_CLASS} data-testid="nav.focus-link">
             {t("nav.focus")}
           </NavLink>
+          <NavLink to="/stats" className={LINK_CLASS} data-testid="nav.stats-link">
+            {t("nav.stats")}
+          </NavLink>
           <NavLink to="/settings" className={LINK_CLASS} data-testid="nav.settings-link">
             {t("nav.settings")}
           </NavLink>
