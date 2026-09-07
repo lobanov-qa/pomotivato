@@ -10,7 +10,9 @@ import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
 
 export interface ChartProps {
-  option: echarts.EChartsOption;
+  /** Options built by chartOptions.ts builders; the host is shape-agnostic
+   * on purpose — builders are the tested seam (dial geometry precedent). */
+  option: Record<string, unknown>;
   height?: number;
   /** Semantic testid from the private registry (plan/TESTIDS.md). */
   testId: string;

@@ -116,8 +116,10 @@ export function estimateVsFactOption(
   };
 }
 
-/** Quadrant retro: completed blocks per Eisenhower cell (spec 04 §3). */
-export function quadrantsOption(rows: QuadrantRowDto[], theme: ChartTheme) {
+/** Quadrant retro: completed blocks per Eisenhower cell (spec 04 §3).
+ * names[i] pairs with rows[i] — RU labels are injected by the screen (the
+ * dictionary owns copy), keys stay the wire contract. */
+export function quadrantsOption(rows: QuadrantRowDto[], theme: ChartTheme, names: string[]) {
   return {
     ...baseText(theme),
     grid: { left: 12, right: 24, top: 16, bottom: 12, containLabel: true },
@@ -128,9 +130,8 @@ export function quadrantsOption(rows: QuadrantRowDto[], theme: ChartTheme) {
       splitLine: { lineStyle: { color: theme.border } },
     },
     yAxis: {
-      // Keys stay the wire contract; RU labels belong to the widget header.
       type: "category",
-      data: rows.map((row) => row.key),
+      data: names,
       axisLabel: { ...axisLabel(theme), fontSize: 10 },
       axisTick: { show: false },
       axisLine: { lineStyle: { color: theme.border } },
