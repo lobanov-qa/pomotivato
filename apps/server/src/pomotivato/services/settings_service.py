@@ -7,6 +7,7 @@ dataclass itself, so there is one list of defaults in the codebase (DRY).
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,13 +19,21 @@ from pomotivato.infra.repository import SettingRepository
 
 SESSION_SETTINGS_KEY = "session"
 UI_SETTINGS_KEY = "ui"
-REQUIRE_SCIENCE_FIELDS_KEY = "require_science_fields"
 
 # Presentation-level enum: themes are a UI concern, so core does not own it.
 Theme = Literal["auto", "light", "dark"]
 
 DEFAULT_MAX_IN_WORK = 6  # funnel law: doing == today == the dial (core MAX_SECTOR=12 ceiling)
 DEFAULT_THEME: Theme = "auto"  # spec 03 ⚑ Q9: OS-following until the toggle says otherwise
+
+
+@dataclass(frozen=True, slots=True)
+class UiSettings:
+    """The ui blob read as one object (spec 05 §3.1: the V8 toggle lives here)."""
+
+    max_in_work: int = DEFAULT_MAX_IN_WORK
+    theme: Theme = DEFAULT_THEME
+    require_science_fields: bool = False
 
 
 class SettingsService:
@@ -43,17 +52,23 @@ class SettingsService:
         validate_settings(settings)
         await self._repo.set(SESSION_SETTINGS_KEY, json.dumps(to_dict(settings)))
 
-    async def get_ui_settings(self) -> tuple[int, Theme]:
-        """(max_in_work, theme) with defaults when the key was never set."""
+    async def get_ui_settings(self) -> UiSettings:
+        """(max_in_work, theme, require_science_fields) with defaults."""
         raw = await self._repo.get(UI_SETTINGS_KEY)
         if raw is None:
-            return DEFAULT_MAX_IN_WORK, DEFAULT_THEME
+            return UiSettings(DEFAULT_MAX_IN_WORK, DEFAULT_THEME, False)
         data = json.loads(raw)
         max_in_work = int(data.get("max_in_work", DEFAULT_MAX_IN_WORK))
         theme = data.get("theme", DEFAULT_THEME)
-        return max_in_work, theme if theme in ("auto", "light", "dark") else DEFAULT_THEME
+        return UiSettings(
+            max_in_work,
+            theme if theme in ("auto", "light", "dark") else DEFAULT_THEME,
+            bool(data.get("require_science_fields", False)),
+        )
 
-    async def put_ui_settings(self, max_in_work: int, theme: Theme) -> None:
+    async def put_ui_settings(
+        self, max_in_work: int, theme: Theme, require_science_fields: bool = False
+    ) -> None:
         if not 1 <= max_in_work <= 12:
             msg = f"max_in_work must be 1..12, got {max_in_work}"
             raise ValidationError(msg)
@@ -61,12 +76,21 @@ class SettingsService:
             msg = f"unknown theme {theme!r}"
             raise ValidationError(msg)
         await self._repo.set(
-            UI_SETTINGS_KEY, json.dumps({"max_in_work": max_in_work, "theme": theme})
+            UI_SETTINGS_KEY,
+            json.dumps(
+                {
+                    "max_in_work": max_in_work,
+                    "theme": theme,
+                    "require_science_fields": bool(require_science_fields),
+                }
+            ),
         )
 
     async def require_science_fields(self) -> bool:
-        raw = await self._repo.get(REQUIRE_SCIENCE_FIELDS_KEY)
-        return False if raw is None else bool(json.loads(raw))
+        """V8 gate truth lives in the ui blob only — one owner (DRY)."""
+        return (await self.get_ui_settings()).require_science_fields
 
     async def set_require_science_fields(self, value: bool) -> None:
-        await self._repo.set(REQUIRE_SCIENCE_FIELDS_KEY, json.dumps(bool(value)))
+        """Write-through to the ui blob (the old key is retired, ⚑ 05 F1)."""
+        ui = await self.get_ui_settings()
+        await self.put_ui_settings(ui.max_in_work, ui.theme, bool(value))

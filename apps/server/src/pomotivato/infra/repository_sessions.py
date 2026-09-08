@@ -238,3 +238,18 @@ class RepetitionRepository:
                 next_due=data["next_due"],
             )
         )
+
+    async def list_all(self) -> tuple[RepetitionState, ...]:
+        """Whole queue: due-filtering is the service's pure helper."""
+        stmt = select(RepetitionRow).order_by(RepetitionRow.next_due, RepetitionRow.task_id)
+        rows = await self._session.scalars(stmt)
+        return tuple(
+            repetition_state_from_dict(
+                {
+                    "task_id": row.task_id,
+                    "interval_idx": row.interval_idx,
+                    "next_due": row.next_due,
+                }
+            )
+            for row in rows
+        )

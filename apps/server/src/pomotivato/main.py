@@ -21,6 +21,7 @@ from pomotivato.api.routers import (
     day_plans,
     export,
     reviews,
+    science,
     session_events,
     sessions,
     settings,
@@ -89,6 +90,8 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     app.include_router(stats.router)
     app.include_router(week.router)
     app.include_router(sprints.router)
+    app.include_router(science.hints_router)
+    app.include_router(science.reps_router)
     app.include_router(export.router)
     app.get("/health")(health)
 

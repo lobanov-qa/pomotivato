@@ -205,7 +205,7 @@ def test_settings_roundtrip_and_v5_rejection(http_app):
             "warmup_min": 0,
             "special_breaks": [],
         },
-        "ui": {"max_in_work": 6, "theme": "auto"},
+        "ui": {"max_in_work": 6, "theme": "auto", "require_science_fields": False},
     }
 
     ok = http_app.put(
@@ -243,7 +243,7 @@ def test_ui_settings_roundtrip_keeps_session_key(http_app):
     after = http_app.get("/api/settings").json()
 
     assert ok.status_code == HTTPStatus.OK
-    assert after["ui"] == {"max_in_work": 9, "theme": "dark"}
+    assert after["ui"] == {"max_in_work": 9, "theme": "dark", "require_science_fields": False}
     assert after["session"] == before  # keys are independent (spec 03 §9)
 
 
