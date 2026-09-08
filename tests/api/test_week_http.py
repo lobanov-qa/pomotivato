@@ -134,6 +134,22 @@ def test_week_future_days_materialize_daily_recurrence(http_app):
 
 
 @pytest.mark.api
+def test_week_future_day_shows_activated_slot_and_no_ghost(http_app):
+    """Spec 05 §3.2/§3.8: after activate, the daily task reads as a slot."""
+    client, clock = http_app
+    tomorrow = (clock.now().date() + timedelta(days=1)).isoformat()
+
+    added = client.post(f"/api/day-plans/{tomorrow}/activate")
+
+    assert added.status_code == HTTPStatus.OK
+    assert added.json()["added"]  # "h-1" lands on sector 1
+    friday = _day(_items(client), tomorrow)
+    assert [s["task_id"] for s in friday["slots"]] == ["h-1"]
+    assert friday["planned"] == []  # the preview stopped ghosting it
+    assert friday["volume"] == 1
+
+
+@pytest.mark.api
 def test_week_validates_days_range_and_bad_start(http_app):
     client, _clock = http_app
 

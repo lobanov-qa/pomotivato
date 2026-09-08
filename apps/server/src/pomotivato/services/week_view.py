@@ -42,7 +42,10 @@ def week_projection(
         if day <= today:
             items.append(_past_day(day, plans.get(day, ()), blocks, scores, tasks_by_id))
         else:
-            items.append(_future_day(day, plans.get(day, ()), recurring))
+            # Planned list skips what the stored plan already holds: the
+            # projection must match what activate would *add*, never show
+            # a ghost row next to its own sector (spec 05 §3.2 preview).
+            items.append(_future_day(day, plans.get(day, ()), recurring, tasks_by_id))
     return {"start": start.isoformat(), "days": days, "items": items}
 
 
@@ -88,17 +91,37 @@ def _past_day(
     }
 
 
-def _future_day(day: date, slots: tuple[Slot, ...], recurring: tuple[Task, ...]) -> dict[str, Any]:
+def _future_day(
+    day: date,
+    slots: tuple[Slot, ...],
+    recurring: tuple[Task, ...],
+    tasks_by_id: dict[str, Task],
+) -> dict[str, Any]:
+    already = {slot.task_id for slot in slots}
     planned = [
         {"task_id": task.id, "title": task.title, "type": task.type.value}
         for task in recurring
-        if expand_recurrence(task.recurrence, day, day)
+        if task.id not in already and expand_recurrence(task.recurrence, day, day)
     ]
     return {
         "date": day.isoformat(),
         "weekday": day.weekday(),
         "kind": "future",
         "planned": planned,
+        # E4b (spec 05 §3.8): the planning surface must show what it added —
+        # real slots with titles, no scores yet (blocks cannot exist).
+        "slots": [
+            {
+                "sector": slot.sector,
+                "task_id": slot.task_id,
+                "task_title": _title(tasks_by_id.get(slot.task_id)),
+                "status": tasks_by_id[slot.task_id].status.value
+                if slot.task_id in tasks_by_id
+                else "deleted",
+                "last_score": None,
+            }
+            for slot in slots
+        ],
         "slots_count": len(slots),
         "volume": len(planned) + len(slots),
     }
