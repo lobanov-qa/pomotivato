@@ -17,8 +17,11 @@ const SETTINGS = {
     long_break_min: 15,
     long_break_every: 4,
     auto_start_next: true,
+    strict_mode: false,
+    warmup_min: 0,
+    special_breaks: [],
   },
-  ui: { max_in_work: 6, theme: "auto" as const },
+  ui: { max_in_work: 6, theme: "auto" as const, require_science_fields: false },
 };
 
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -104,6 +107,52 @@ describe("SettingsScreen", () => {
     await typeNumber(screen.getByTestId("settings.field-work_min"), "500");
 
     expect(screen.getByTestId("settings.field-work_min")).toHaveValue(120);
+  });
+
+  it("modes section: strict flip + warm-up clamp land in the session PUT", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByTestId("settings.switch-strict");
+
+    await user.click(screen.getByTestId("settings.switch-strict"));
+    await typeNumber(screen.getByTestId("settings.field-warmup_min"), "99");
+
+    expect(screen.getByTestId("settings.switch-strict")).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByTestId("settings.field-warmup_min")).toHaveValue(30); // V12 clamp
+    await user.click(screen.getByTestId("settings.save"));
+    await waitFor(() => expect(puts).toHaveLength(2));
+    expect(puts.find((x) => x.url === "/api/settings/session")?.body).toMatchObject({
+      strict_mode: true,
+      warmup_min: 30,
+    });
+  });
+
+  it("special-breaks editor adds and removes rows through the draft", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByTestId("settings.special-break-add");
+
+    await user.click(screen.getByTestId("settings.special-break-add"));
+
+    expect(screen.getByTestId("settings.special-break-0")).toBeInTheDocument();
+    await user.click(screen.getByTestId("settings.special-break-0-remove"));
+    expect(screen.queryByTestId("settings.special-break-0")).not.toBeInTheDocument();
+    // removed the row again -> back to pristine: save stays disabled
+    expect(screen.getByTestId("settings.save")).toBeDisabled();
+  });
+
+  it("require-science switch rides the ui PUT (V8 gate)", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByTestId("settings.switch-require-science");
+
+    await user.click(screen.getByTestId("settings.switch-require-science"));
+    await user.click(screen.getByTestId("settings.save"));
+
+    await waitFor(() => expect(puts).toHaveLength(2));
+    expect(puts.find((x) => x.url === "/api/settings/ui")?.body).toMatchObject({
+      require_science_fields: true,
+    });
   });
 
   it("toggles auto_start_next via the switch", async () => {

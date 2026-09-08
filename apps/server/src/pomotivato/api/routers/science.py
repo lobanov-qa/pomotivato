@@ -15,8 +15,9 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from pomotivato.api.deps import ClockDep, DbSession, RegistryDep
-from pomotivato.api.schemas import HintDto, RepetitionDueDto
+from pomotivato.api.schemas import FrogDto, HintDto, RepetitionDueDto
 from pomotivato.core.models import SegmentPhase
+from pomotivato.core.science import frog_candidate
 from pomotivato.infra.repository import TaskRepository
 from pomotivato.infra.repository_sessions import RepetitionRepository
 from pomotivato.services.hints import due_on
@@ -62,6 +63,14 @@ async def get_hints(
             live.open_minutes_spent = round(burn_sec / 60)
     hints = await HintService(session).hints_for_day(day or today, live)
     return [HintDto(kind=h.kind, params=h.params) for h in hints]
+
+
+@hints_router.get("/frog", response_model=FrogDto)
+async def get_frog(session: DbSession) -> FrogDto:
+    """The day's frog candidate id or null (pure core rule, zero client math)."""
+    tasks = await TaskRepository(session).list_all()
+    frog = frog_candidate(tasks)
+    return FrogDto(task_id=None if frog is None else frog.id)
 
 
 @reps_router.get("/due", response_model=list[RepetitionDueDto])

@@ -70,6 +70,9 @@ function session(overrides: Partial<SessionDto> = {}): SessionDto {
       long_break_min: 15,
       long_break_every: 4,
       auto_start_next: true,
+      strict_mode: false,
+      warmup_min: 0,
+      special_breaks: [],
     },
     timeline: [
       {
