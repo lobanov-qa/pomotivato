@@ -144,3 +144,36 @@ def test_window_after_today_shows_only_future() -> None:
     result = _projection(start=TUESDAY + timedelta(days=3), days=2)
 
     assert {item["kind"] for item in result["items"]} == {"future"}
+
+
+def test_future_day_renders_own_slots_with_titles() -> None:
+    # E4b planning surface: a task dragged onto tomorrow must appear in its
+    # slots (with title), not vanish behind the planned-only contract.
+    jog = task_factory(id="r-1", title="Daily jog", recurrence=daily_recurrence())
+    plan = {TUESDAY: (Slot(sector=1, task_id="x-1"),)}
+    other = task_factory(id="x-1", title="Gig")
+
+    item = _projection(days=2, plans=plan, tasks=(other, jog))["items"][1]
+
+    assert item["slots"] == [
+        {
+            "sector": 1,
+            "task_id": "x-1",
+            "task_title": "Gig",
+            "status": TaskStatus.BACKLOG.value,
+            "last_score": None,
+        }
+    ]
+
+
+def test_activated_task_never_ghosts_in_planned() -> None:
+    # After activate, the daily task IS a slot: the recurrence preview must
+    # not show a second copy of it above the sector list (spec 05 §3.2).
+    jog = task_factory(id="r-1", title="Daily jog", recurrence=daily_recurrence())
+    plan = {TUESDAY: (Slot(sector=1, task_id="r-1"),)}
+
+    item = _projection(days=2, plans=plan, tasks=(jog,))["items"][1]
+
+    assert item["planned"] == []
+    assert item["slots_count"] == 1
+    assert item["volume"] == 1

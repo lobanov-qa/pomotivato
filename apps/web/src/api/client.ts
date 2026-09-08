@@ -120,7 +120,7 @@ export interface DailySummaryDto {
 /* Stats/week DTOs live in ./types_stats (300-line split). Imported for
  * method signatures and re-exported so existing `from "./api/client"`
  * paths keep working (E3 lesson: aliases on Cyrillic paths are fragile). */
-import type { StatsDto, WeekDto } from "./types_stats";
+import type { AddResultDto, SprintDto, StatsDto, WeekDto } from "./types_stats";
 
 export type {
   ChartLabels,
@@ -138,6 +138,8 @@ export type {
   StatsPeriodDto,
   StatsTotalsDto,
   StreakDto,
+  SprintDto,
+  AddResultDto,
   WeekDayDto,
   WeekDto,
   ZombieItemDto,
@@ -207,6 +209,22 @@ export const api = {
     request<DayPlanDto>("PUT", `/api/day-plans/${plan.date}`, plan),
   moveSlot: (date: string, from: number, to: number) =>
     request<DayPlanDto>("POST", `/api/day-plans/${date}/slots/move`, { from, to }),
+  /** Drag-to-plan primitive (spec 05 §3.8): append the task's chunk. */
+  addTaskToPlan: (date: string, taskId: string) =>
+    request<AddResultDto>("POST", `/api/day-plans/${date}/add`, { task_id: taskId }),
+  /** Materialize the date's recurring tasks into its plan (spec 05 §3.2). */
+  activatePlan: (date: string) => request<AddResultDto>("POST", `/api/day-plans/${date}/activate`),
+
+  listSprints: () => request<SprintDto[]>("GET", "/api/sprints"),
+  createSprint: (body: {
+    name?: string | null;
+    goal?: string | null;
+    done_criteria?: string | null;
+    start_date: string;
+    end_date: string;
+  }) => request<SprintDto>("POST", "/api/sprints", body),
+  patchSprint: (id: string, changes: Partial<SprintDto>) =>
+    request<SprintDto>("PATCH", `/api/sprints/${id}`, changes),
 
   startSession: (body: { day_plan_id: string; settings?: Partial<SessionSettingsDto> }) =>
     request<SessionDto>("POST", "/api/sessions", body),

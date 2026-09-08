@@ -1,10 +1,11 @@
 /**
- * The week browser contract (spec 04 §2/§4.2): read-only, kind decides the
- * body, volume bars come from the server. Drag-to-plan is E4b by law —
- * nothing here mutates anything.
+ * The week screen (spec 04 §4.2 read-only browser + spec 05 §3.8 planning):
+ * kind decides the body, volume bars come from the server. E4b turned the
+ * future days into a planning surface: drops/add, activation, slot order —
+ * while past days (⚑ Q4) stay untouchable.
  *
- * All expectations hang off the CURRENT Monday, never a hardcoded date:
- * the screen defaults to the live week, so CI runs on any day stay green.
+ * All expectations hang off the CURRENT Monday/today, never a hardcoded
+ * date: CI stays green any day of the week.
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -32,10 +33,7 @@ function weekItems(start: string) {
           weekday: 0, // start is always a Monday (BASE/shifted windows)
           kind: "past" as const,
           summary: { blocks_done: 3, focus_min: 30, average_score: 4.5, tasks_done: 2 },
-          slots: [
-            { sector: 1, task_id: "t-1", task_title: "Alpha", status: "doing", last_score: 4 },
-            { sector: 2, task_id: "t-2", task_title: "Beta", status: "planned", last_score: null },
-          ],
+          slots: SLOTS,
           planned: null,
           slots_count: null,
           volume: 3,
@@ -45,25 +43,69 @@ function weekItems(start: string) {
           weekday: i,
           kind: "future" as const,
           summary: null,
-          slots: null,
           planned:
             i === 1 ? [{ task_id: "h-1", title: "Daily habit", type: "habit" as const }] : [],
-          slots_count: 0,
-          volume: i === 1 ? 1 : 0,
+          // E4b: future days carry their real slots too (planning surface).
+          slots: i === 1 ? SLOTS.slice(0, 2) : [],
+          slots_count: i === 1 ? 2 : 0,
+          volume: i === 1 ? 3 : 0,
         }
   );
 }
+
+const SLOTS = [
+  { sector: 1, task_id: "t-1", task_title: "Alpha", status: "doing", last_score: 4 },
+  { sector: 2, task_id: "t-2", task_title: "Beta", status: "planned", last_score: null },
+];
 
 const fetchMock = vi.fn();
 
 /** The mock window follows the requested start: prev/next/today clicks
  * must actually shift the rendered day cells. */
+const STRIP_TASK = {
+  id: "new-1",
+  title: "Fresh idea",
+  type: "normal",
+  important: false,
+  urgent: false,
+  status: "backlog",
+  estimate_blocks: 1,
+  recurrence: { kind: "once" },
+  deadline: null,
+  parent_id: null,
+  when_then: null,
+  done_criteria: null,
+  benefit: null,
+  created_at: "2026-09-06T09:00:00+00:00",
+};
+
+let posted: { url: string; body: unknown }[];
+
 function mockFetch() {
-  fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+  posted = [];
+  fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), "http://x");
     if (url.pathname === "/api/week") {
       const start = url.searchParams.get("start") ?? BASE;
       return new Response(JSON.stringify({ start, days: 7, items: weekItems(start) }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (url.pathname === "/api/tasks") {
+      return new Response(JSON.stringify([STRIP_TASK]), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (url.pathname.endsWith("/activate")) {
+      posted.push({ url: url.pathname, body: init?.body });
+      return new Response(
+        JSON.stringify({ plan: { id: "p", date: "x", slots: [] }, added: ["h-1"], skipped: [] }),
+        { headers: { "content-type": "application/json" } },
+      );
+    }
+    if (url.pathname.endsWith("/slots/move")) {
+      posted.push({ url: url.pathname, body: JSON.parse(String(init?.body)) });
+      return new Response(JSON.stringify({ id: "p", date: "x", slots: [] }), {
         headers: { "content-type": "application/json" },
       });
     }
@@ -82,8 +124,13 @@ function renderScreen() {
 }
 
 function lastParam(name: string): string | null {
-  const url = new URL(String(fetchMock.mock.calls.at(-1)?.[0]), "http://x");
-  return url.searchParams.get(name);
+  // The screen also fetches /api/tasks and /api/sprints; the window
+  // contract concerns only the last /api/week call.
+  const call = [...fetchMock.mock.calls]
+    .reverse()
+    .find(([input]) => new URL(String(input), "http://x").pathname === "/api/week");
+  if (!call) return null;
+  return new URL(String(call[0]), "http://x").searchParams.get(name);
 }
 
 beforeEach(() => {
@@ -122,17 +169,18 @@ describe("WeekScreen", () => {
     expect(screen.getByTestId(`week.day-${dayAt(BASE, 6)}`)).toHaveTextContent("нет повторов");
   });
 
-  it("opens a read-only detail panel when a day is clicked", async () => {
+  it("opens a detail panel with the task law holding: forms never live here", async () => {
     mockFetch();
 
     renderScreen();
-    await screen.findByTestId(`week.day-${BASE}`);
-    await userEvent.click(screen.getByTestId(`week.day-${BASE}`));
+    await screen.findByTestId(`week.day-${dayAt(BASE, 1)}`);
+    await userEvent.click(screen.getByTestId(`week.day-${dayAt(BASE, 1)}`));
 
     const detail = screen.getByTestId("week.detail");
     expect(detail).toHaveTextContent("Alpha");
     expect(detail).toHaveTextContent("Beta");
-    // Read-only law: no inputs anywhere in the detail panel.
+    // Editing a task is kanban-only: no inputs/textareas, only order arrows
+    // (buttons) — the E3 screen-law extended to the planning surface.
     expect(detail.querySelector("input")).toBeNull();
     expect(detail.querySelector("textarea")).toBeNull();
 
@@ -155,6 +203,58 @@ describe("WeekScreen", () => {
     // refetch by design), so the contract is the DOM, not the network.
     await userEvent.click(screen.getByTestId("week.prev"));
     await waitFor(() => expect(screen.getByTestId(`week.day-${BASE}`)).toBeInTheDocument());
+  });
+
+  it("lists open cards in the backlog strip (spec 05 §3.8 drop sources)", async () => {
+    mockFetch();
+
+    renderScreen();
+    await screen.findByTestId(`week.day-${BASE}`);
+
+    expect(screen.getByTestId("week.backlog-strip")).toHaveTextContent("Fresh idea");
+    expect(screen.getByTestId("week.strip-new-1")).toBeInTheDocument();
+  });
+
+  it("activation button posts to today and flashes the honest outcome", async () => {
+    mockFetch();
+    const todayIso = new Date().toLocaleDateString("en-CA");
+
+    renderScreen();
+    await screen.findByTestId("week.activate-today");
+    await userEvent.click(screen.getByTestId("week.activate-today"));
+
+    await waitFor(() =>
+      expect(posted.some((x) => x.url === `/api/day-plans/${todayIso}/activate`)).toBe(true)
+    );
+    expect(await screen.findByTestId("week.flash")).toHaveTextContent("Повторы добавлены");
+  });
+
+  it("detail arrows reorder the plan via slots/move (insert semantics)", async () => {
+    mockFetch();
+
+    renderScreen();
+    await screen.findByTestId(`week.day-${dayAt(BASE, 1)}`);
+    await userEvent.click(screen.getByTestId(`week.day-${dayAt(BASE, 1)}`));
+
+    // sector 1 is first: "up" is disabled, "down" moves position 1 -> 2
+    expect(screen.getByTestId("week.slot-move-up-1")).toBeDisabled();
+    await userEvent.click(screen.getByTestId("week.slot-move-down-1"));
+
+    await waitFor(() =>
+      expect(posted.some((x) => x.url.endsWith("/slots/move") && JSON.stringify(x.body) === '{"from":1,"to":2}')).toBe(
+        true
+      )
+    );
+  });
+
+  it("renders the sprint band with a create affordance when no sprint exists", async () => {
+    mockFetch();
+
+    renderScreen();
+    await screen.findByTestId("week.sprint-band");
+
+    expect(screen.getByTestId("week.sprint-band")).toHaveTextContent("Спринта нет");
+    expect(screen.getByTestId("week.sprint-create")).toBeInTheDocument();
   });
 
   it("jumps back to the current week", async () => {

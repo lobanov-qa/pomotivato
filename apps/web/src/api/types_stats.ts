@@ -4,7 +4,7 @@
  * server owns every number — these interfaces carry results, not rules.
  */
 
-import type { TaskType } from "./client";
+import type { DayPlanDto, TaskType } from "./client";
 
 export interface StatsPeriodDto {
   from: string;
@@ -114,6 +114,25 @@ export interface PlannedDto {
   task_id: string;
   title: string;
   type: TaskType;
+}
+
+/** Sprint wire mirror (spec 05 §3.10, ADR-0003 p.3). */
+export interface SprintDto {
+  id: string;
+  number: number;
+  name: string | null;
+  start_date: string;
+  end_date: string;
+  goal: string | null;
+  done_criteria: string | null;
+  status: "planned" | "active" | "completed";
+}
+
+/** add/activate outcome: honest plan + who got in / squeezed out (§3.8). */
+export interface AddResultDto {
+  plan: DayPlanDto;
+  added: string[];
+  skipped: string[];
 }
 
 export interface WeekDayDto {

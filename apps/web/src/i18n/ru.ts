@@ -152,6 +152,30 @@ const RU = {
   "week.today": "сегодня",
   "week.empty-past": "пусто",
   "week.empty-future": "нет повторов",
+  "week.sprint-none": "Спринта нет",
+  "week.sprint-create": "Создать спринт",
+  "week.backlog-strip": "Бэклог (перетащи на день)",
+  "week.activate": "Повторения в план",
+  "week.activate-done": "Повторы добавлены",
+  "week.activate-none": "Новых повторов нет",
+  "week.activate-skipped": "Не влезли (12 секторов заняты)",
+  "week.plan-move-up": "выше",
+  "week.plan-move-down": "ниже",
+  "week.added": "Задача добавлена в план",
+
+  "common.cancel": "Отмена",
+
+  "sprint.title": "Спринт",
+  "sprint.from": "с",
+  "sprint.to": "по",
+  "sprint.name-placeholder": "Название (необязательно)",
+  "sprint.goal-placeholder": "Цель спринта",
+  "sprint.done-placeholder": "Критерий готовности",
+  "sprint.week1": "1 неделя",
+  "sprint.week2": "2 недели",
+  "sprint.period-error": "Период 1–14 дней, старт не позже конца",
+  "sprint.activate": "Активировать",
+  "sprint.complete": "Завершить",
 } as const;
 
 export type MessageKey = keyof typeof RU;
