@@ -39,7 +39,15 @@ class ReviewService:
         self._repetitions = RepetitionRepository(session)
         self._tasks = TaskRepository(session)
 
-    async def submit(self, segment_id: str, score: int, comment: str | None = None) -> Review:
+    async def submit(
+        self,
+        segment_id: str,
+        score: int,
+        comment: str | None = None,
+        *,
+        recall_notes: str | None = None,
+        reward: str | None = None,
+    ) -> Review:
         segment = await self._segments.get(segment_id)
         if segment is None:
             msg = f"segment {segment_id!r} not found"
@@ -48,7 +56,9 @@ class ReviewService:
         if fsm is None:
             msg = f"segment {segment_id!r} belongs to a finished session"
             raise InvalidReviewError(msg)
-        review = fsm.submit_review(segment_id, score, comment)
+        review = fsm.submit_review(
+            segment_id, score, comment, recall_notes=recall_notes, reward=reward
+        )
         await self._reviews.upsert(review)
         await self._advance_repetition(segment.task_id)
         return review

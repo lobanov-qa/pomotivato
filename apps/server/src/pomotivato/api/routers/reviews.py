@@ -19,5 +19,7 @@ async def create_review(
     registry: RegistryDep,
 ) -> ReviewDto:
     service = ReviewService(session, clock, registry)
-    review = await service.submit(dto.segment_id, dto.score, dto.comment)
+    review = await service.submit(
+        dto.segment_id, dto.score, dto.comment, recall_notes=dto.recall_notes, reward=dto.reward
+    )
     return ReviewDto.from_core(review)

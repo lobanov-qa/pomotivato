@@ -254,8 +254,22 @@ class SessionFSM:
                 self._boundary_pause = True
                 self._state = SessionState.PAUSED
 
-    def submit_review(self, segment_id: str, score: int, comment: str | None = None) -> Review:
-        """Attach a review to a completed WORK segment; never blocks the FSM."""
+    def submit_review(
+        self,
+        segment_id: str,
+        score: int,
+        comment: str | None = None,
+        *,
+        recall_notes: str | None = None,
+        reward: str | None = None,
+    ) -> Review:
+        """Attach a review to a completed WORK segment; never blocks the FSM.
+
+        recall_notes/reward are E4b payload fields (spec 05 §3.7-3.8): the
+        active-recall notes of a study block and the habit-loop reward.
+        They arrive with the score; the ladder advance (E2) still triggers
+        on the review itself.
+        """
         live = next((seg for seg in self._segments if seg.seg_id == segment_id), None)
         reviewable = (
             live is not None
@@ -268,7 +282,13 @@ class SessionFSM:
         if any(rev.segment_id == segment_id for rev in self._reviews):
             msg = f"segment {segment_id!r} already has a review"
             raise InvalidReviewError(msg)
-        review = Review(segment_id=segment_id, score=score, comment=comment)
+        review = Review(
+            segment_id=segment_id,
+            score=score,
+            comment=comment,
+            recall_notes=recall_notes,
+            reward=reward,
+        )
         validate_review(review)
         self._reviews.append(review)
         return review
