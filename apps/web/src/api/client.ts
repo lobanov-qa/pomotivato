@@ -26,12 +26,23 @@ export interface TaskDto {
   created_at: string;
 }
 
+export interface SpecialBreakDto {
+  /** Wall time "HH:MM" in the machine's local zone (spec 05 ⚑ Q2). */
+  at: string;
+  duration_min: number;
+  label: string;
+}
+
 export interface SessionSettingsDto {
   work_min: number;
   break_min: number;
   long_break_min: number;
   long_break_every: number;
   auto_start_next: boolean;
+  // E4b modes (spec 05 §3.3-3.5).
+  strict_mode: boolean;
+  warmup_min: number;
+  special_breaks: SpecialBreakDto[];
 }
 
 export type ThemeName = "auto" | "light" | "dark";
@@ -39,6 +50,7 @@ export type ThemeName = "auto" | "light" | "dark";
 export interface UiSettingsDto {
   max_in_work: number;
   theme: ThemeName;
+  require_science_fields: boolean;
 }
 
 export interface SettingsBundleDto {
@@ -212,6 +224,9 @@ export const api = {
   putSessionSettings: (settings: SessionSettingsDto) =>
     request<SessionSettingsDto>("PUT", "/api/settings/session", settings),
   putUiSettings: (ui: UiSettingsDto) => request<UiSettingsDto>("PUT", "/api/settings/ui", ui),
+  /** The "eat the frog" candidate id (core rule, server-computed): the
+   * kanban badge must not re-implement frog_candidate in TS. */
+  getFrog: () => request<{ task_id: string | null }>("GET", "/api/frog"),
 
   getStatus: () => request<StatusDto>("GET", "/api/status"),
   getSummary: (date: string) => request<DailySummaryDto>("GET", `/api/summary/${date}`),

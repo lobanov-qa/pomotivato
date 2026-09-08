@@ -32,9 +32,13 @@ interface Props {
   onDelete: (id: string) => void;
   /** Other tasks for the parent selector (only top-level, non-self). */
   parents: TaskDto[];
+  /** V8-soft ring: scheduled card with a blank when_then (spec 05 §3.1). */
+  wetHint: boolean;
+  /** The card is the server's frog candidate (spec 05 §3.9): badge only. */
+  isFrog: boolean;
 }
 
-export function TaskCard({ task, editing, onChange, onDelete, parents }: Props) {
+export function TaskCard({ task, editing, onChange, onDelete, parents, wetHint, isFrog }: Props) {
   const [scienceOpen, setScienceOpen] = useState(false);
   const drag = useDraggable({ id: task.id, disabled: editing });
   const listeners = drag.listeners ?? {};
@@ -58,6 +62,7 @@ export function TaskCard({ task, editing, onChange, onDelete, parents }: Props) 
         "before:absolute before:inset-y-1 before:left-1 before:w-1 before:rounded-full before:content-['']",
         STRIPE[task.status],
         "hover:shadow-card-hover",
+        wetHint && "ring-2 ring-warning/60",
         drag.isDragging && "z-10 opacity-90 shadow-card-drag",
         task.status === "done" && "opacity-70",
       )}
@@ -94,7 +99,25 @@ export function TaskCard({ task, editing, onChange, onDelete, parents }: Props) 
             {task.title}
           </h3>
         )}
+        {isFrog && !editing && (
+          <span
+            data-testid={`task-card.frog-badge-${task.id}`}
+            title={t("kanban.frog-title")}
+            className="shrink-0 rounded-full bg-warning/15 px-1.5 text-sm leading-5"
+            aria-label={t("kanban.frog-title")}
+          >
+            🐸
+          </span>
+        )}
       </div>
+      {wetHint && !editing && (
+        <p
+          data-testid={`task-card.wt-hint-${task.id}`}
+          className="mt-1 text-xs text-warning"
+        >
+          {t("kanban.wt-hint")}
+        </p>
+      )}
 
       {editing ? (
         <div className="mt-2 flex flex-col gap-2">

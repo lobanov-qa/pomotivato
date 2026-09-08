@@ -392,6 +392,13 @@ class HintDto(BaseModel):
     params: dict[str, str | int] = Field(default_factory=dict)
 
 
+class FrogDto(BaseModel):
+    """Server-computed "eat the frog" candidate id (spec 05 §3.9): the
+    kanban badge renders it, the client never re-implements the rule."""
+
+    task_id: str | None = None
+
+
 class RepetitionDueDto(BaseModel):
     """One due row of the spaced-repetition queue (spec 05 §3.7)."""
 

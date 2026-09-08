@@ -248,3 +248,24 @@ def test_due_queue_empty_until_a_study_review_lands(http_client):
         f"/api/repetitions/due?as_of={(TODAY + timedelta(days=5)).isoformat()}"
     ).json()
     assert overdue[0]["overdue_days"] == 2  # honest "просрочено на N" data
+
+
+@pytest.mark.api
+def test_frog_endpoint_returns_server_candidate(http_client):
+    client, _clock = http_client
+    assert client.get("/api/frog").json() == {"task_id": None}
+
+    make_task(client, "t-frog", estimate_blocks=5)
+    make_task(client, "t-small")
+
+    assert client.get("/api/frog").json() == {"task_id": "t-frog"}
+
+
+@pytest.mark.api
+def test_frog_endpoint_ignores_done_tasks(http_client):
+    client, _clock = http_client
+    make_task(client, "t-frog", estimate_blocks=5)
+    for to in ("planned", "doing", "done"):
+        client.post("/api/tasks/t-frog/status", json={"to": to})
+
+    assert client.get("/api/frog").json() == {"task_id": None}

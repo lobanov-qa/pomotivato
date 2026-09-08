@@ -19,12 +19,14 @@ import { BOARD_COLUMNS, columnOf, dropTarget, type BoardColumn } from "@/feature
 import {
   useCreateTask,
   useDeleteTask,
+  useFrogId,
   useMoveTask,
   usePatchTask,
   useTasks,
   TASKS_KEY,
 } from "@/features/kanban/hooks";
 import { deriveSlots, planIdForDate } from "@/features/kanban/planner";
+import { isFrogCard, needsWhenThen } from "@/features/kanban/science";
 import { t } from "@/i18n/ru";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +37,7 @@ function today(): string {
 
 export function KanbanScreen() {
   const { tasks, byId, error: loadError, isLoading } = useTasks();
+  const { data: frog } = useFrogId();
   const client = useQueryClient();
   const move = useMoveTask();
   const patch = usePatchTask();
@@ -168,6 +171,8 @@ export function KanbanScreen() {
                     task={task}
                     editing={editingColumn === column}
                     parents={tasks}
+                    wetHint={needsWhenThen(task)}
+                    isFrog={isFrogCard(task.id, frog?.task_id)}
                     onChange={onFieldChange}
                     onDelete={(id) => void remove.mutateAsync(id).catch(() => undefined)}
                   />

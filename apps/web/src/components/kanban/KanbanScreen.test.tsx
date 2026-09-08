@@ -31,16 +31,19 @@ function task(overrides: Partial<TaskDto> = {}): TaskDto {
   };
 }
 
+let frogId: string | null = null;
+
 const BOARD: TaskDto[] = [
   task({ id: "a", title: "Backlog card" }),
   task({ id: "b", title: "Planned card", status: "planned", estimate_blocks: 2 }),
-  task({ id: "c", title: "Doing card", status: "doing", estimate_blocks: 2 }),
+  task({ id: "c", title: "Doing card", status: "doing", estimate_blocks: 2, when_then: "если 9:00 → пишу" }),
   task({ id: "d", title: "Done card", status: "done" }),
 ];
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  frogId = null;
   fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url.startsWith("/api/tasks")) {
@@ -48,6 +51,9 @@ beforeEach(() => {
     }
     if (url.startsWith("/api/day-plans/")) {
       return jsonResponse(200, { id: "p", date: "2026-09-05", slots: [] });
+    }
+    if (url === "/api/frog") {
+      return jsonResponse(200, { task_id: frogId });
     }
     throw new Error(`unexpected fetch: ${url}`);
   });
@@ -163,5 +169,35 @@ describe("KanbanScreen", () => {
     // the listener node aria-disabled; invisible is a Tailwind class jsdom
     // cannot compute)
     expect(screen.getByTestId("task-card.grip-a")).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("wet-hint marks only scheduled cards with a blank when_then", async () => {
+    renderScreen();
+    await screen.findByTestId("task-card.root-b");
+
+    expect(screen.getByTestId("task-card.wt-hint-b")).toBeInTheDocument(); // planned, blank
+    expect(screen.queryByTestId("task-card.wt-hint-c")).not.toBeInTheDocument(); // has when_then
+    expect(screen.queryByTestId("task-card.wt-hint-a")).not.toBeInTheDocument(); // backlog: no ring
+    expect(screen.queryByTestId("task-card.wt-hint-d")).not.toBeInTheDocument(); // done: no ring
+  });
+
+  it("frog badge lights the server-computed candidate", async () => {
+    frogId = "b";
+    renderScreen();
+    await screen.findByTestId("task-card.root-b");
+
+    expect(screen.getByTestId("task-card.frog-badge-b")).toBeInTheDocument();
+    expect(screen.queryByTestId("task-card.frog-badge-a")).not.toBeInTheDocument();
+    frogId = null;
+  });
+
+  it("edit mode hides the science hint rows (forms own the fields)", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByTestId("task-card.wt-hint-b");
+
+    await user.click(screen.getByTestId("kanban.edit-toggle-planned"));
+
+    expect(screen.queryByTestId("task-card.wt-hint-b")).not.toBeInTheDocument();
   });
 });

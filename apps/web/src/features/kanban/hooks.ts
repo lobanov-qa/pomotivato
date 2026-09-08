@@ -11,6 +11,21 @@ import { applyMove } from "@/features/kanban/board";
 
 export const TASKS_KEY = ["tasks"] as const;
 
+export const FROG_KEY = ["frog"] as const;
+
+/** Server-owned frog candidate (GET /api/frog) — the kanban badge never
+ * re-implements core's rule. Invalidated alongside the task list. */
+export function useFrogId() {
+  return useQuery({ queryKey: FROG_KEY, queryFn: api.getFrog });
+}
+
+/** Any task mutation can flip the frog (status/estimate edits): invalidate
+ * both keys so the badge and the board always agree (one helper, 4 sites). */
+function invalidateBoard(client: ReturnType<typeof useQueryClient>): void {
+  void client.invalidateQueries({ queryKey: TASKS_KEY });
+  void client.invalidateQueries({ queryKey: FROG_KEY });
+}
+
 export function useTasks() {
   const query = useQuery({
     queryKey: TASKS_KEY,
@@ -41,7 +56,7 @@ export function useMoveTask() {
     },
     onSettled: () => {
       snapshot.current = null;
-      void client.invalidateQueries({ queryKey: TASKS_KEY });
+      invalidateBoard(client);
     },
   });
 }
@@ -52,7 +67,7 @@ export function usePatchTask() {
   return useMutation({
     mutationFn: ({ id, changes }: { id: string; changes: Partial<TaskDto> }) =>
       api.patchTask(id, changes),
-    onSettled: () => void client.invalidateQueries({ queryKey: TASKS_KEY }),
+    onSettled: () => invalidateBoard(client),
   });
 }
 
@@ -61,7 +76,7 @@ export function useCreateTask() {
   return useMutation({
     mutationFn: (body: { id: string; title: string; type: TaskDto["type"]; important: boolean; urgent: boolean; estimate_blocks: number }) =>
       api.createTask(body),
-    onSettled: () => void client.invalidateQueries({ queryKey: TASKS_KEY }),
+    onSettled: () => invalidateBoard(client),
   });
 }
 
@@ -69,6 +84,6 @@ export function useDeleteTask() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.deleteTask(id),
-    onSettled: () => void client.invalidateQueries({ queryKey: TASKS_KEY }),
+    onSettled: () => invalidateBoard(client),
   });
 }

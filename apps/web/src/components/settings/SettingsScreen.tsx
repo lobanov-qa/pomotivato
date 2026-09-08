@@ -14,6 +14,7 @@ import type {
 } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
+import { SpecialBreaksEditor } from "@/components/settings/SpecialBreaksEditor";
 import {
   usePutSessionSettings,
   usePutUiSettings,
@@ -131,6 +132,57 @@ function SettingsForm({ settings }: { settings: SettingsBundleDto }) {
         </label>
       </section>
 
+      <section className="flex flex-col gap-3" data-testid="settings.modes">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          {t("settings.section-modes")}
+        </h2>
+        <label className="flex items-center justify-between">
+          <span className="text-sm">{t("settings.strict")}</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={sessionDraft.strict_mode}
+            data-testid="settings.switch-strict"
+            onClick={() =>
+              setSessionDraft({ ...sessionDraft, strict_mode: !sessionDraft.strict_mode })
+            }
+            className={cn(
+              "relative h-6 w-11 rounded-full border transition-colors",
+              sessionDraft.strict_mode ? "border-primary bg-primary" : "bg-muted",
+            )}
+          >
+            <span
+              className={cn(
+                "absolute top-0.5 h-4.5 w-4.5 rounded-full bg-card shadow transition-all",
+                sessionDraft.strict_mode ? "left-6" : "left-0.5",
+              )}
+            />
+          </button>
+        </label>
+        <div className="grid grid-cols-[1fr_96px] items-center gap-3">
+          <Label htmlFor="settings-warmup">{t("settings.warmup")}</Label>
+          <Input
+            id="settings-warmup"
+            type="number"
+            min={0}
+            max={30}
+            data-testid="settings.field-warmup_min"
+            value={sessionDraft.warmup_min}
+            onChange={(e) =>
+              setSessionDraft({
+                ...sessionDraft,
+                warmup_min: Math.min(30, Math.max(0, Number(e.target.value) || 0)),
+              })
+            }
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">{t("settings.sb-title")}</p>
+        <SpecialBreaksEditor
+          breaks={sessionDraft.special_breaks}
+          onChange={(special_breaks) => setSessionDraft({ ...sessionDraft, special_breaks })}
+        />
+      </section>
+
       <section className="flex flex-col gap-3" data-testid="settings.ui">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           {t("settings.section-ui")}
@@ -175,6 +227,32 @@ function SettingsForm({ settings }: { settings: SettingsBundleDto }) {
             ))}
           </div>
         </div>
+        <label className="flex items-center justify-between">
+          <span className="text-sm">{t("settings.require-science")}</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={uiDraft.require_science_fields}
+            data-testid="settings.switch-require-science"
+            onClick={() =>
+              setUiDraft({
+                ...uiDraft,
+                require_science_fields: !uiDraft.require_science_fields,
+              })
+            }
+            className={cn(
+              "relative h-6 w-11 rounded-full border transition-colors",
+              uiDraft.require_science_fields ? "border-primary bg-primary" : "bg-muted",
+            )}
+          >
+            <span
+              className={cn(
+                "absolute top-0.5 h-4.5 w-4.5 rounded-full bg-card shadow transition-all",
+                uiDraft.require_science_fields ? "left-6" : "left-0.5",
+              )}
+            />
+          </button>
+        </label>
       </section>
 
       <div className="flex items-center gap-3">
