@@ -28,6 +28,7 @@
   --color-work: #e11d48;
   --color-break: #0d9488; /* teal-600: short break */
   --color-long-break: #6366f1; /* indigo-500: long break */
+  --color-special-break: #d97706; /* amber-600: clock-anchored meal break */
   --color-warning: #d97706;
   --color-danger: #dc2626;
 
@@ -70,6 +71,7 @@
     --color-work: #f43f5e;
     --color-break: #14b8a6;
     --color-long-break: #818cf8;
+    --color-special-break: #fbbf24; /* amber-400 on dark */
 
     --color-col-backlog: #71717a;
     --color-col-planned: #60a5fa;
@@ -97,6 +99,7 @@
   --color-work: #f43f5e;
   --color-break: #14b8a6;
   --color-long-break: #818cf8;
+  --color-special-break: #fbbf24; /* amber-400 on dark */
 
   --color-col-backlog: #71717a;
   --color-col-planned: #60a5fa;

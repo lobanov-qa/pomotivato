@@ -96,6 +96,21 @@ function mockFetch() {
         headers: { "content-type": "application/json" },
       });
     }
+    if (url.pathname === "/api/repetitions/due") {
+      return new Response(
+        JSON.stringify([
+          { task_id: "d-1", title: "Chapter 3", interval_idx: 1, next_due: "2026-09-06", overdue_days: 2 },
+        ]),
+        { headers: { "content-type": "application/json" } },
+      );
+    }
+    if (url.pathname.endsWith("/add")) {
+      posted.push({ url: url.pathname, body: JSON.parse(String(init?.body)) });
+      return new Response(
+        JSON.stringify({ plan: { id: "p", date: "x", slots: [] }, added: ["d-1"], skipped: [] }),
+        { headers: { "content-type": "application/json" } },
+      );
+    }
     if (url.pathname.endsWith("/activate")) {
       posted.push({ url: url.pathname, body: init?.body });
       return new Response(
@@ -255,6 +270,25 @@ describe("WeekScreen", () => {
 
     expect(screen.getByTestId("week.sprint-band")).toHaveTextContent("Спринта нет");
     expect(screen.getByTestId("week.sprint-create")).toBeInTheDocument();
+  });
+
+  it("due queue renders rows, overdue days and plans via the add primitive", async () => {
+    mockFetch();
+    renderScreen();
+    const section = await screen.findByTestId("week.due-section");
+
+    expect(section).toHaveTextContent("Chapter 3");
+    expect(screen.getByTestId("week.due-row-d-1")).toHaveTextContent("просрочено на 2");
+    expect(screen.getByTestId("week.due-row-d-1")).toHaveTextContent("шаг 2/5");
+
+    await userEvent.click(screen.getByTestId("week.due-add-d-1"));
+
+    await waitFor(() =>
+      expect(posted.some((x) => x.url.endsWith("/add") && JSON.stringify(x.body) === '{"task_id":"d-1"}')).toBe(
+        true
+      )
+    );
+    expect(await screen.findByTestId("week.due-flash")).toHaveTextContent("добавлено в план");
   });
 
   it("jumps back to the current week", async () => {

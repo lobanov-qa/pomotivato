@@ -11,7 +11,7 @@
  */
 
 export const DIAL_MAX_SECTORS = 12; // core MAX_SECTOR mirror
-export type PhaseName = "work" | "break" | "long_break";
+export type PhaseName = "work" | "break" | "long_break" | "special_break";
 
 export function sectorSpan(sectors: number): number {
   return 360 / clampSectors(sectors);
@@ -78,6 +78,8 @@ export function phaseColorVar(phase: PhaseName | null): string {
       return "var(--color-break)";
     case "long_break":
       return "var(--color-long-break)";
+    case "special_break":
+      return "var(--color-special-break)";
     default:
       return "var(--color-work)";
   }

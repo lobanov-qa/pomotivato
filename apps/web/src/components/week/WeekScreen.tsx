@@ -18,6 +18,7 @@ import { api } from "@/api/client";
 import type { WeekDayDto } from "@/api/types_stats";
 import { useTasks } from "@/features/kanban/hooks";
 import { useSprintDates } from "@/features/sprints/hooks";
+import { DueSection } from "@/components/week/DueSection";
 import { SprintBand } from "@/components/week/SprintBand";
 import { mondayOf, shiftWeeks } from "@/features/week/dates";
 import { t } from "@/i18n/ru";
@@ -188,6 +189,8 @@ export function WeekScreen() {
           {addTask.isError || activate.isError ? t("error.unknown") : flash}
         </p>
       )}
+
+      <DueSection />
 
       {selectedDay && (
         <DayDetail item={selectedDay} onClose={() => setSelected(null)} onChanged={invalidateWeek} />

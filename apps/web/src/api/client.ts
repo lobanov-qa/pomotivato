@@ -120,7 +120,10 @@ export interface DailySummaryDto {
 /* Stats/week DTOs live in ./types_stats (300-line split). Imported for
  * method signatures and re-exported so existing `from "./api/client"`
  * paths keep working (E3 lesson: aliases on Cyrillic paths are fragile). */
+import type { FrogDto, HintDto, RepetitionDueDto } from "./types_science";
 import type { AddResultDto, SprintDto, StatsDto, WeekDto } from "./types_stats";
+
+export type { FrogDto, HintDto, HintKind, RepetitionDueDto } from "./types_science";
 
 export type {
   ChartLabels,
@@ -235,7 +238,14 @@ export const api = {
   skipBreak: (id: string) => request<SessionDto>("POST", `/api/sessions/${id}/skip-break`),
   sessionEventsUrl: (id: string) => `/api/sessions/${id}/events`,
 
-  submitReview: (body: { segment_id: string; score: number; comment?: string }) =>
+  submitReview: (body: {
+    segment_id: string;
+    score: number;
+    comment?: string;
+    // E4b (spec 05 §3.7-3.8): study recall notes / habit reward.
+    recall_notes?: string;
+    reward?: string;
+  }) =>
     request<{ segment_id: string; score: number }>("POST", "/api/reviews", body),
 
   getSettings: () => request<SettingsBundleDto>("GET", "/api/settings"),
@@ -244,7 +254,15 @@ export const api = {
   putUiSettings: (ui: UiSettingsDto) => request<UiSettingsDto>("PUT", "/api/settings/ui", ui),
   /** The "eat the frog" candidate id (core rule, server-computed): the
    * kanban badge must not re-implement frog_candidate in TS. */
-  getFrog: () => request<{ task_id: string | null }>("GET", "/api/frog"),
+  getFrog: () => request<FrogDto>("GET", "/api/frog"),
+
+  /** Break-time learning-science hints (spec 05 §3.6): kinds+params only. */
+  getHints: () => request<HintDto[]>("GET", "/api/hints"),
+  /** Spaced-repetition inbox due on/before `asOf` (spec 05 §3.7). */
+  getRepetitionDue: (asOf?: string) => {
+    const query = asOf ? `?as_of=${asOf}` : "";
+    return request<RepetitionDueDto[]>("GET", `/api/repetitions/due${query}`);
+  },
 
   getStatus: () => request<StatusDto>("GET", "/api/status"),
   getSummary: (date: string) => request<DailySummaryDto>("GET", `/api/summary/${date}`),
