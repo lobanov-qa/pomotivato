@@ -156,6 +156,27 @@ def test_delete_conflicts_when_task_is_doing(http_app):
 
 
 @pytest.mark.api
+def test_delete_backlog_task_purges_past_day_slot(http_app):
+    """DF1 over HTTP: yesterday's ghost slot is swept away with the card."""
+    http_app.post("/api/tasks", json=_task_payload())
+    http_app.post("/api/tasks", json=_task_payload(id="task-101", title="Keeper"))
+    http_app.put(
+        "/api/day-plans/2026-09-01",
+        json={
+            "id": "plan-old",
+            "date": "2026-09-01",
+            "slots": [{"sector": 1, "task_id": "task-100"}],
+        },
+    )
+
+    deleted = http_app.delete("/api/tasks/task-100")
+    plan = http_app.get("/api/day-plans/2026-09-01")
+
+    assert deleted.status_code == HTTPStatus.NO_CONTENT
+    assert plan.status_code == HTTPStatus.NOT_FOUND
+
+
+@pytest.mark.api
 def test_day_plan_upsert_get_and_move_over_http(http_app):
     http_app.post("/api/tasks", json=_task_payload())
     http_app.post("/api/tasks", json=_task_payload(id="task-101", title="Another"))

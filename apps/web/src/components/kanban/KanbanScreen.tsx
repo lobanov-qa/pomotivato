@@ -15,7 +15,7 @@ import { KanbanColumn } from "@/components/kanban/KanbanColumn";
 import { TaskCard } from "@/components/kanban/TaskCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BOARD_COLUMNS, columnOf, dropTarget, type BoardColumn } from "@/features/kanban/board";
+import { BOARD_COLUMNS, columnOf, deleteErrorKey, dropTarget, type BoardColumn } from "@/features/kanban/board";
 import {
   useCreateTask,
   useDeleteTask,
@@ -64,7 +64,12 @@ export function KanbanScreen() {
     const latest = client.getQueryData<TaskDto[]>(TASKS_KEY) ?? [];
     const slots = deriveSlots(latest.filter((task) => task.status === "doing"));
     const date = today();
-    if (slots.length === 0) return; // V9: an empty plan is not sendable
+    if (slots.length === 0) {
+      // V9: an empty plan is not sendable — but it must still be forgotten
+      // (DF1): leftover ghost slots would block the cards' deletion.
+      await api.clearDayPlan(date).catch(() => undefined);
+      return;
+    }
     await api.putDayPlan({ id: planIdForDate(date), date, slots });
   }
 
@@ -98,6 +103,17 @@ export function KanbanScreen() {
   async function onFieldChange(id: string, changes: Partial<TaskDto>) {
     await patch.mutateAsync({ id, changes }).catch(() => undefined);
     void syncPlan();
+  }
+
+  /** DF1: a refused delete explains itself in RU instead of vanishing silently. */
+  async function onDelete(id: string) {
+    try {
+      await remove.mutateAsync(id);
+    } catch (error) {
+      const message = error instanceof ApiError ? deleteErrorKey(error.message) : "kanban.delete-failed";
+      setConflictToast(t(message));
+      window.setTimeout(() => setConflictToast(null), 5000);
+    }
   }
 
   async function onCreate() {
@@ -174,7 +190,7 @@ export function KanbanScreen() {
                     wetHint={needsWhenThen(task)}
                     isFrog={isFrogCard(task.id, frog?.task_id)}
                     onChange={onFieldChange}
-                    onDelete={(id) => void remove.mutateAsync(id).catch(() => undefined)}
+                    onDelete={(id) => void onDelete(id)}
                   />
                 ))}
               </KanbanColumn>

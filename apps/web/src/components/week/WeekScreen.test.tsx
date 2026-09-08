@@ -1,8 +1,8 @@
 /**
  * The week screen (spec 04 §4.2 read-only browser + spec 05 §3.8 planning):
- * kind decides the body, volume bars come from the server. E4b turned the
- * future days into a planning surface: drops/add, activation, slot order —
- * while past days (⚑ Q4) stay untouchable.
+ * kind decides the body, volume bars come from the server. E4b-UX DF1 took
+ * the drag strip away: the day panel now manages its slots directly —
+ * reorder arrows and a × per slot — while past days (⚑ Q4) stay untouchable.
  *
  * All expectations hang off the CURRENT Monday/today, never a hardcoded
  * date: CI stays green any day of the week.
@@ -118,6 +118,12 @@ function mockFetch() {
         { headers: { "content-type": "application/json" } },
       );
     }
+    if (/\/slots\/\d+$/.test(url.pathname) && init?.method === "DELETE") {
+      posted.push({ url: url.pathname, body: null });
+      return new Response(JSON.stringify({ id: "p", date: "x", slots: [] }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
     if (url.pathname.endsWith("/slots/move")) {
       posted.push({ url: url.pathname, body: JSON.parse(String(init?.body)) });
       return new Response(JSON.stringify({ id: "p", date: "x", slots: [] }), {
@@ -220,16 +226,6 @@ describe("WeekScreen", () => {
     await waitFor(() => expect(screen.getByTestId(`week.day-${BASE}`)).toBeInTheDocument());
   });
 
-  it("lists open cards in the backlog strip (spec 05 §3.8 drop sources)", async () => {
-    mockFetch();
-
-    renderScreen();
-    await screen.findByTestId(`week.day-${BASE}`);
-
-    expect(screen.getByTestId("week.backlog-strip")).toHaveTextContent("Fresh idea");
-    expect(screen.getByTestId("week.strip-new-1")).toBeInTheDocument();
-  });
-
   it("activation button posts to today and flashes the honest outcome", async () => {
     mockFetch();
     const todayIso = new Date().toLocaleDateString("en-CA");
@@ -258,6 +254,21 @@ describe("WeekScreen", () => {
     await waitFor(() =>
       expect(posted.some((x) => x.url.endsWith("/slots/move") && JSON.stringify(x.body) === '{"from":1,"to":2}')).toBe(
         true
+      )
+    );
+  });
+
+  it("detail × takes the slot off the day via DELETE (DF1)", async () => {
+    mockFetch();
+
+    renderScreen();
+    await userEvent.click(await screen.findByTestId(`week.day-${dayAt(BASE, 1)}`));
+
+    await userEvent.click(screen.getByTestId("week.slot-remove-1"));
+
+    await waitFor(() =>
+      expect(posted.some((x) => x.url.endsWith("/day-plans/" + dayAt(BASE, 1) + "/slots/1"))).toBe(
+        true,
       )
     );
   });

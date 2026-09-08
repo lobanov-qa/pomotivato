@@ -130,9 +130,10 @@ class TaskService:
         if await self._tasks.has_children(task_id):
             msg = f"task {task_id!r} still has children"
             raise ConflictError(msg)
-        plans = await self._day_plans.dates_referencing(task_id)
-        if plans:
-            msg = f"task {task_id!r} is planned on {[p.isoformat() for p in plans]}"
-            raise ConflictError(msg)
+        # DF1 of spec 06 (author 08.09, second pass): a backlog card owns
+        # no future — every slot referencing it, past or planned, is its
+        # shadow and is swept first; worked segments detach, not vanish.
+        await self._day_plans.purge_task_references(task_id)
+        await self._tasks.detach_history(task_id)
         await self._tasks.delete(task_id)
         await self._session.flush()

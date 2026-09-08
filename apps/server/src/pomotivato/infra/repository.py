@@ -8,10 +8,13 @@ core helpers, so the wire format keeps a single owner (DRY).
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import date, datetime
 from typing import Any
 
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pomotivato.core.models import (
@@ -27,7 +30,15 @@ from pomotivato.core.models import (
     task_from_dict,
     to_dict,
 )
-from pomotivato.infra.orm import DayPlanRow, SettingRow, SprintRow, TaskRow
+from pomotivato.infra.orm import (
+    DayPlanRow,
+    RepetitionRow,
+    SegmentRow,
+    SessionRow,
+    SettingRow,
+    SprintRow,
+    TaskRow,
+)
 
 
 def _iso(value: date | datetime | None) -> str | None:
@@ -119,6 +130,20 @@ class TaskRepository:
         rows = await self._session.scalars(select(TaskRow).order_by(TaskRow.id))
         return tuple(_task_from_row(row) for row in rows)
 
+    async def detach_history(self, task_id: str) -> None:
+        """DF1: forget a card without erasing the worked time behind it.
+
+        Completed timer segments keep their numbers but lose the link to
+        the card (stats already tolerate NULL task ids); the spaced-
+        repetition queue row is pure future-state and goes away with it.
+        """
+        await self._session.execute(
+            sa_update(SegmentRow).where(SegmentRow.task_id == task_id).values(task_id=None)
+        )
+        await self._session.execute(
+            sa_delete(RepetitionRow).where(RepetitionRow.task_id == task_id)
+        )
+
     async def has_children(self, task_id: str) -> bool:
         stmt = select(TaskRow.id).where(TaskRow.parent_id == task_id).limit(1)
         child_id = await self._session.scalar(stmt)
@@ -166,18 +191,47 @@ class DayPlanRepository:
         rows = await self._session.scalars(select(DayPlanRow).order_by(DayPlanRow.date))
         return tuple(_plan_from_row(row) for row in rows)
 
-    async def dates_referencing(self, task_id: str) -> tuple[date, ...]:
-        """Dates whose plan still places this task in a slot.
+    async def purge_task_references(self, task_id: str) -> tuple[date, ...]:
+        """Drop this task's slots from every plan, past or future (spec 06 DF1).
 
-        Slots live in one JSON column, so the scan is in Python: a
-        desktop-scale table (one row per day) makes LIKE hacks KISS-over.
+        A backlog card owns no future: whatever still names it is its own
+        shadow, swept with the card in the same transaction. A plan emptied
+        by the purge loses its row unless session history still points at
+        it (FK) — then the row survives as an empty shell. Returns purged
+        dates for the caller to log.
         """
         rows = await self._session.scalars(select(DayPlanRow))
-        return tuple(
-            date.fromisoformat(row.date)
-            for row in rows
-            if any(slot.task_id == task_id for slot in _plan_from_row(row).slots)
-        )
+        purged: list[date] = []
+        for row in rows:
+            plan = _plan_from_row(row)
+            kept = tuple(slot for slot in plan.slots if slot.task_id != task_id)
+            if len(kept) == len(plan.slots):
+                continue
+            if kept:
+                await self.save(replace(plan, slots=kept))
+            else:
+                await self.drop_or_empty(plan)
+            purged.append(date.fromisoformat(row.date))
+        await self._session.flush()
+        return tuple(purged)
+
+    async def has_session_references(self, plan_id: str) -> bool:
+        """Does any stored session still point at this plan row (FK guard)?"""
+        stmt = select(SessionRow.id).where(SessionRow.day_plan_id == plan_id).limit(1)
+        return await self._session.scalar(stmt) is not None
+
+    async def drop_or_empty(self, plan: DayPlan) -> None:
+        """Delete the row when safe; otherwise keep it with zero slots.
+
+        V9 forbids empty plans on the write surface (upsert), but history
+        pins some rows: an empty shell is the honest compromise.
+        """
+        if await self.has_session_references(plan.id):
+            await self.save(replace(plan, slots=()))
+        else:
+            row = await self._session.get(DayPlanRow, plan.id)
+            if row is not None:
+                await self._session.delete(row)
 
 
 class SettingRepository:

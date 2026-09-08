@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from pomotivato.core.errors import DayPlanValidationError
+from pomotivato.core.errors import DayPlanValidationError, ValidationError
 from pomotivato.core.models import DayPlan, Slot
 from pomotivato.infra.errors import NotFoundError
 from tests.factories.core_models import DEFAULT_MOMENT, day_plan_factory, task_factory
@@ -145,3 +145,124 @@ def test_get_raises_not_found_when_day_has_no_plan(database, call):
 
     with pytest.raises(NotFoundError):
         asyncio.run(scenario())
+
+
+@pytest.mark.api
+def test_remove_slot_drops_task_and_renumbers_when_slot_taken_off(database, call):
+    """DF1: the week screen's x removes a card from the day, sectors close up."""
+
+    async def scenario() -> Any:
+        async with call() as svc:
+            a = await svc.task.create(task_factory())
+            b = await svc.task.create(task_factory())
+            c = await svc.task.create(task_factory())
+        day = DEFAULT_MOMENT.date()
+        async with call() as svc:
+            await svc.day_plan.upsert(_plan_with(a.id, b.id, c.id, day=day))
+        async with call() as svc:
+            await svc.day_plan.remove_slot(day, sector=1, today=day)
+        async with call() as svc:
+            plan = await svc.day_plan.get(day)
+        return a.id, b.id, c.id, plan
+
+    first_id, second_id, third_id, plan = asyncio.run(scenario())
+
+    assert [(s.sector, s.task_id) for s in plan.slots] == [(1, second_id), (2, third_id)]
+
+
+@pytest.mark.api
+def test_remove_slot_sweeps_plan_when_last_slot_leaves(database, call):
+    """The emptied day must stop claiming the card (ghost-slot blocker)."""
+
+    async def scenario() -> Any:
+        async with call() as svc:
+            solo = await svc.task.create(task_factory())
+        day = DEFAULT_MOMENT.date()
+        async with call() as svc:
+            await svc.day_plan.upsert(_plan_with(solo.id, day=day))
+        async with call() as svc:
+            await svc.day_plan.remove_slot(day, sector=1, today=day)
+        async with call() as svc:
+            await svc.day_plan.get(day)
+
+    with pytest.raises(NotFoundError):
+        asyncio.run(scenario())
+
+
+@pytest.mark.api
+def test_remove_slot_keeps_plan_row_when_session_history_pins_it(database, call):
+    """FK honesty: a plan a session points at survives as an empty shell."""
+    day = DEFAULT_MOMENT.date()
+
+    async def scenario() -> Any:
+        async with call() as svc:
+            solo = await svc.task.create(task_factory())
+            plan = await svc.day_plan.upsert(_plan_with(solo.id, day=day))
+        plan_id = plan.id
+        await _pin_plan_with_session(database, plan_id)
+        async with call() as svc:
+            await svc.day_plan.remove_slot(day, sector=1, today=day)
+        async with call() as svc:
+            return await svc.day_plan.get(day)
+
+    shell = asyncio.run(scenario())
+
+    assert shell.slots == ()
+
+
+async def _pin_plan_with_session(database: Any, plan_id: str) -> None:
+    """Insert a minimal session row referencing plan_id (FK witness)."""
+    from pomotivato.infra.orm import SessionRow
+
+    async with database.new_session() as session:
+        session.add(
+            SessionRow(
+                id=f"session-pin-{plan_id}",
+                day_plan_id=plan_id,
+                state="stopped",
+                settings_json="{}",
+            )
+        )
+        await session.commit()
+
+
+@pytest.mark.api
+def test_clear_forgets_today_plan_and_refuses_past(database, call):
+    """DF1: empty doing-column clears today; yesterday stays untouched."""
+    day = DEFAULT_MOMENT.date()
+
+    async def scenario() -> None:
+        async with call() as svc:
+            a = await svc.task.create(task_factory())
+            await svc.day_plan.upsert(_plan_with(a.id, day=day))
+        async with call() as svc:
+            await svc.day_plan.clear(day, today=day)
+        async with call() as svc:
+            with pytest.raises(NotFoundError):
+                await svc.day_plan.get(day)  # the ghost day is gone
+        async with call() as svc:
+            with pytest.raises(ValidationError):
+                await svc.day_plan.clear(day - timedelta(days=1), today=day)
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.api
+def test_clear_raises_not_found_when_session_history_pins_it_but_refuses_past(database, call):
+    """Boundary: clear past a pinned day leaves the shell, past days 422."""
+    day = DEFAULT_MOMENT.date()
+
+    async def scenario() -> Any:
+        async with call() as svc:
+            a = await svc.task.create(task_factory())
+            plan = await svc.day_plan.upsert(_plan_with(a.id, day=day))
+        plan_id = plan.id
+        await _pin_plan_with_session(database, plan_id)
+        async with call() as svc:
+            await svc.day_plan.clear(day, today=day)
+        async with call() as svc:
+            return await svc.day_plan.get(day)
+
+    shell = asyncio.run(scenario())
+
+    assert shell.slots == ()

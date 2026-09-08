@@ -1,25 +1,19 @@
 /**
  * Week screen (spec 04 §2 read-only browser + spec 05 §3.8 planning).
- * E4b: the strip of open cards under the header is draggable onto day
- * cells (POST add, one server chunk), today offers "activate" for
- * recurring tasks, and the day panel grew ↑/↓ (POST slots/move). Past
- * dates stay untouchable (⚑ Q4): drops and arrows skip them.
+ * E4b-UX DF1 (author 08.09): the drag strip left — the kanban is the one
+ * place cards get planned; the day panel got a × per slot (DELETE slot)
+ * so anything the week holds can be taken off without dragging. Today
+ * still offers "activate" for recurring tasks and ↑/↓ reorder (POST
+ * slots/move). Past dates stay untouchable (⚑ Q4).
  */
 
-import {
-  DndContext,
-  useDraggable,
-  useDroppable,
-  type DragEndEvent,
-} from "@dnd-kit/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "@/api/client";
 import type { WeekDayDto } from "@/api/types_stats";
-import { useTasks } from "@/features/kanban/hooks";
-import { useSprintDates } from "@/features/sprints/hooks";
 import { DueSection } from "@/components/week/DueSection";
 import { SprintBand } from "@/components/week/SprintBand";
+import { useSprintDates } from "@/features/sprints/hooks";
 import { mondayOf, shiftWeeks } from "@/features/week/dates";
 import { t } from "@/i18n/ru";
 import { cn } from "@/lib/utils";
@@ -48,30 +42,15 @@ export function WeekScreen() {
     queryFn: () => api.getWeek(start, 7),
     staleTime: 30_000, // the window is mostly history; SSE owns the live day
   });
-  const { tasks } = useTasks();
   const inSprint = useSprintDates();
 
   const selectedDay = data?.items.find((item) => item.date === selected) ?? null;
   const windowDates = data?.items.map((item) => item.date) ?? [];
-  const strip = tasks.filter((task) => task.status === "backlog" || task.status === "planned");
 
   const invalidateWeek = () => {
     void client.invalidateQueries({ queryKey: ["week"] });
     void client.invalidateQueries({ queryKey: ["tasks"] });
   };
-
-  const addTask = useMutation({
-    mutationFn: ({ date, taskId }: { date: string; taskId: string }) =>
-      api.addTaskToPlan(date, taskId),
-    onSuccess: (result, { date }) => {
-      invalidateWeek();
-      setFlash(
-        result.skipped.length > 0
-          ? `${shortDate(date)}: ${t("week.activate-skipped")}`
-          : `${shortDate(date)}: ${t("week.added")}`,
-      );
-    },
-  });
 
   const activate = useMutation({
     mutationFn: (date: string) => api.activatePlan(date),
@@ -85,14 +64,6 @@ export function WeekScreen() {
       );
     },
   });
-
-  function onDragEnd(event: DragEndEvent): void {
-    const { active, over } = event;
-    if (!over) return;
-    const date = String(over.id);
-    if (date < today()) return; // ⚑ Q4 guard: past is not a drop surface
-    addTask.mutate({ date, taskId: String(active.id) });
-  }
 
   return (
     <section className="mx-auto w-full max-w-4xl space-y-4" data-testid="week.screen">
@@ -148,45 +119,25 @@ export function WeekScreen() {
           ))}
         </div>
       ) : (
-        <DndContext onDragEnd={onDragEnd}>
-          <div className="grid grid-cols-7 gap-2">
-            {data.items.map((item) => (
-              <DayCell
-                key={item.date}
-                item={item}
-                selected={selected === item.date}
-                droppable={item.date >= today()}
-                sprintDay={inSprint(item.date)}
-                onSelect={() => setSelected(item.date)}
-              />
-            ))}
-          </div>
-          <div
-            className="flex gap-2 overflow-x-auto rounded-card border bg-card/50 p-2"
-            data-testid="week.backlog-strip"
-          >
-            <span className="shrink-0 self-center text-[10px] uppercase text-muted-foreground">
-              {t("week.backlog-strip")}
-            </span>
-            {strip.length === 0 && (
-              <span className="self-center text-xs text-muted-foreground">—</span>
-            )}
-            {strip.map((task) => (
-              <StripCard key={task.id} id={task.id} title={task.title} />
-            ))}
-          </div>
-        </DndContext>
+        <div className="grid grid-cols-7 gap-2">
+          {data.items.map((item) => (
+            <DayCell
+              key={item.date}
+              item={item}
+              selected={selected === item.date}
+              sprintDay={inSprint(item.date)}
+              onSelect={() => setSelected(item.date)}
+            />
+          ))}
+        </div>
       )}
 
-      {(flash || addTask.isError || activate.isError) && (
+      {(flash || activate.isError) && (
         <p
           data-testid="week.flash"
-          className={cn(
-            "text-xs",
-            addTask.isError || activate.isError ? "text-danger" : "text-muted-foreground",
-          )}
+          className={cn("text-xs", activate.isError ? "text-danger" : "text-muted-foreground")}
         >
-          {addTask.isError || activate.isError ? t("error.unknown") : flash}
+          {activate.isError ? t("error.unknown") : flash}
         </p>
       )}
 
@@ -199,50 +150,20 @@ export function WeekScreen() {
   );
 }
 
-function StripCard({ id, title }: { id: string; title: string }) {
-  // Destructure before JSX: the react-hooks refs rule flags member reads
-  // (drag.x) in render output; locals keep the same value lint-clean
-  // (TaskCard pattern from E3).
-  const { setNodeRef, listeners, attributes, transform, isDragging } = useDraggable({ id });
-  const style = transform
-    ? { transform: `translate(${transform.x}px, ${transform.y}px)` }
-    : undefined;
-  return (
-    <button
-      ref={setNodeRef}
-      type="button"
-      data-testid={`week.strip-${id}`}
-      style={style}
-      className={cn(
-        "max-w-40 shrink-0 cursor-grab touch-none truncate rounded-md border bg-card px-2 py-1 text-xs hover:bg-muted",
-        isDragging && "z-50 opacity-80 shadow-card-drag",
-      )}
-      {...(listeners ?? {})}
-      {...(attributes ?? {})}
-    >
-      {title}
-    </button>
-  );
-}
-
 function DayCell({
   item,
   selected,
-  droppable,
   sprintDay,
   onSelect,
 }: {
   item: WeekDayDto;
   selected: boolean;
-  droppable: boolean;
   sprintDay: boolean;
   onSelect: () => void;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: item.date, disabled: !droppable });
   const summary = item.summary;
   return (
     <button
-      ref={setNodeRef}
       type="button"
       data-testid={`week.day-${item.date}`}
       onClick={onSelect}
@@ -251,7 +172,6 @@ function DayCell({
         "flex h-36 flex-col rounded-card border p-1 text-left",
         selected ? "border-2 border-primary bg-card" : "bg-card hover:bg-muted/50",
         sprintDay && !selected && "border-primary/40",
-        isOver && droppable && "ring-2 ring-primary/70",
       )}
     >
       <span className="text-[10px] uppercase text-muted-foreground">
@@ -300,11 +220,23 @@ function DayDetail({
   onChanged: () => void;
 }) {
   const [error, setError] = useState(false);
-  const editable = item.date >= today() && (item.slots?.length ?? 0) > 1;
+  const editable = item.date >= today();
+  const slotCount = item.slots?.length ?? 0;
 
   async function move(from: number, to: number): Promise<void> {
     try {
       await api.moveSlot(item.date, from, to);
+      setError(false);
+      onChanged();
+    } catch {
+      setError(true);
+    }
+  }
+
+  /** DF1: take one card off the day; the × must work even on a lone slot. */
+  async function remove(sector: number): Promise<void> {
+    try {
+      await api.removeSlot(item.date, sector);
       setError(false);
       onChanged();
     } catch {
@@ -357,7 +289,7 @@ function DayDetail({
                     type="button"
                     aria-label={t("week.plan-move-up")}
                     data-testid={`week.slot-move-up-${slot.sector}`}
-                    disabled={index === 0}
+                    disabled={index === 0 || slotCount <= 1}
                     onClick={() => void move(index + 1, index)}
                     className="rounded px-1 text-xs hover:bg-muted disabled:opacity-30"
                   >
@@ -367,11 +299,20 @@ function DayDetail({
                     type="button"
                     aria-label={t("week.plan-move-down")}
                     data-testid={`week.slot-move-down-${slot.sector}`}
-                    disabled={index === item.slots!.length - 1}
+                    disabled={index === slotCount - 1 || slotCount <= 1}
                     onClick={() => void move(index + 1, index + 2)}
                     className="rounded px-1 text-xs hover:bg-muted disabled:opacity-30"
                   >
                     ↓
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("week.plan-remove")}
+                    data-testid={`week.slot-remove-${slot.sector}`}
+                    onClick={() => void remove(slot.sector)}
+                    className="rounded px-1 text-xs text-danger hover:bg-muted"
+                  >
+                    ×
                   </button>
                 </span>
               )}

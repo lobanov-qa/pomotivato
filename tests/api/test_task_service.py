@@ -248,15 +248,113 @@ def test_delete_conflicts_when_children_reference_parent(database, call):
 
 
 @pytest.mark.api
-def test_delete_conflicts_when_day_plan_places_task(database, call):
+def test_delete_purges_stale_slot_references_when_task_is_backlog(database, call):
+    """DF1: a backlog card stays deletable even if ghost slots reference it."""
+    ghost = task_factory()
+    other = task_factory()
+    yesterday = DEFAULT_DAY - timedelta(days=1)
+
     async def scenario() -> Any:
         async with call() as svc:
-            placed = await svc.task.create(task_factory())
+            await svc.task.create(ghost)
+            await svc.task.create(other)
             await svc.day_plan.upsert(
-                day_plan_factory(date=DEFAULT_DAY, slots=(slot_factory(task_id=placed.id),))
+                day_plan_factory(
+                    date=yesterday,
+                    slots=(
+                        slot_factory(sector=1, task_id=ghost.id),
+                        slot_factory(sector=2, task_id=other.id),
+                    ),
+                )
             )
         async with call() as svc:
-            await svc.task.delete(placed.id)
+            await svc.task.delete(ghost.id)
+        async with call() as svc:
+            plan = await svc.day_plan.get(yesterday)
+            return [(slot.sector, slot.task_id) for slot in plan.slots]
 
-    with pytest.raises(ConflictError):
-        asyncio.run(scenario())
+    remaining = asyncio.run(scenario())
+
+    assert remaining == [(2, other.id)]
+
+
+@pytest.mark.api
+def test_delete_purges_future_slots_and_keeps_worked_segments(database, call):
+    """DF1 second pass (author 08.09): a backlog card owns no future.
+
+    Slots on today/future are swept with the card (its shadow, not a
+    blocker), and worked segments keep their numbers detached — the FK
+    situation that used to 500 the whole delete.
+    """
+    ghost = task_factory()
+    today = DEFAULT_DAY
+
+    async def scenario() -> Any:
+        async with call() as svc:
+            await svc.task.create(ghost)
+            await svc.day_plan.upsert(
+                day_plan_factory(date=today, slots=(slot_factory(task_id=ghost.id),))
+            )
+        async with call() as svc:
+            await svc.task.delete(ghost.id)
+        async with call() as svc:
+            with pytest.raises(NotFoundError):
+                await svc.task.get(ghost.id)
+            with pytest.raises(NotFoundError):
+                await svc.day_plan.get(today)  # the emptied plan row is swept too
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.api
+def test_delete_detaches_worked_segments_when_history_references_card(database, call):
+    """DF1 second pass: past timer blocks survive the card, unlinked.
+
+    The FK on segments.task_id used to 500 the whole delete — the dogfood
+    repro: a backlog card whose sector was worked on can now be removed.
+    """
+    ghost = task_factory()
+
+    async def scenario() -> Any:
+        async with call() as svc:
+            await svc.task.create(ghost)
+            await svc.day_plan.upsert(
+                day_plan_factory(date=DEFAULT_DAY, slots=(slot_factory(task_id=ghost.id),))
+            )
+        from sqlalchemy import select
+
+        from pomotivato.infra.orm import DayPlanRow, SegmentRow, SessionRow
+
+        async with database.new_session() as session:
+            plan_row = await session.scalar(select(DayPlanRow).limit(1))
+            assert plan_row is not None
+            session.add(
+                SessionRow(
+                    id="session-seed",
+                    day_plan_id=plan_row.id,
+                    state="stopped",
+                    settings_json="{}",
+                )
+            )
+            await session.flush()
+            session.add(
+                SegmentRow(
+                    id="segment-seed",
+                    session_id="session-seed",
+                    task_id=ghost.id,
+                    phase="work",
+                    planned_min=25,
+                )
+            )
+            await session.commit()
+        async with call() as svc:
+            await svc.task.delete(ghost.id)
+        async with database.new_session() as session:
+            from pomotivato.infra.orm import SegmentRow as SegmentModel
+
+            row = await session.get(SegmentModel, "segment-seed")
+            return row.task_id if row is not None else "row-gone"
+
+    detached_task_id = asyncio.run(scenario())
+
+    assert detached_task_id is None  # history kept, link gone

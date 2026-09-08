@@ -212,6 +212,11 @@ export const api = {
     request<DayPlanDto>("PUT", `/api/day-plans/${plan.date}`, plan),
   moveSlot: (date: string, from: number, to: number) =>
     request<DayPlanDto>("POST", `/api/day-plans/${date}/slots/move`, { from, to }),
+
+  removeSlot: (date: string, sector: number) =>
+    request<DayPlanDto>("DELETE", `/api/day-plans/${date}/slots/${sector}`),
+
+  clearDayPlan: (date: string) => request<void>("DELETE", `/api/day-plans/${date}`),
   /** Drag-to-plan primitive (spec 05 §3.8): append the task's chunk. */
   addTaskToPlan: (date: string, taskId: string) =>
     request<AddResultDto>("POST", `/api/day-plans/${date}/add`, { task_id: taskId }),
