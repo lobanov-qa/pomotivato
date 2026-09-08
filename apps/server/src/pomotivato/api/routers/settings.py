@@ -20,10 +20,14 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 @router.get("", response_model=SettingsBundleDto)
 async def get_settings(session: DbSession) -> SettingsBundleDto:
     service = SettingsService(session)
-    sectors, theme = await service.get_ui_settings()
+    ui = await service.get_ui_settings()
     return SettingsBundleDto(
         session=SessionSettingsDto.from_core(await service.get_session_settings()),
-        ui=UiSettingsDto(max_in_work=sectors, theme=theme),
+        ui=UiSettingsDto(
+            max_in_work=ui.max_in_work,
+            theme=ui.theme,
+            require_science_fields=ui.require_science_fields,
+        ),
     )
 
 
@@ -38,5 +42,5 @@ async def put_session_settings(dto: SessionSettingsDto, session: DbSession) -> S
 @router.put("/ui", response_model=UiSettingsDto)
 async def put_ui_settings(dto: UiSettingsDto, session: DbSession) -> UiSettingsDto:
     service = SettingsService(session)
-    await service.put_ui_settings(dto.max_in_work, dto.theme)
+    await service.put_ui_settings(dto.max_in_work, dto.theme, dto.require_science_fields)
     return dto

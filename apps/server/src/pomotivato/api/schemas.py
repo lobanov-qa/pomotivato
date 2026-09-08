@@ -288,15 +288,12 @@ ThemeName = Literal["auto", "light", "dark"]
 
 
 class UiSettingsDto(BaseModel):
-    """UI-only settings (spec 03 §5, ⚑ Q3/Q9): in-work capacity + theme.
-
-    max_in_work caps the «В работе» funnel column (= today = the dial,
-    author's funnel law); sectors themselves always equal the plan size.
-    Lives outside core: presentation, not domain rule (12 = MAX_SECTOR).
-    """
+    """UI-only settings (spec 03 §5, ⚑ Q3/Q9): in-work capacity + theme
+    + the V8 science-fields gate (spec 05 §3.1 — the toggle is ui-truth)."""
 
     max_in_work: int = Field(default=6, ge=1, le=12)
     theme: ThemeName = "auto"
+    require_science_fields: bool = False
 
 
 class SettingsBundleDto(BaseModel):
@@ -368,3 +365,38 @@ class SprintDto(BaseModel):
     @classmethod
     def from_core(cls, sprint: Sprint) -> SprintDto:
         return cls(**to_dict(sprint))
+
+
+class DayPlanAddDto(BaseModel):
+    """POST /api/day-plans/{date}/add body (spec 05 §3.8): the chunk source."""
+
+    task_id: str
+
+
+class AddResultDto(BaseModel):
+    """Mutation outcome: the honest new plan + who got in / squeezed out.
+
+    skipped is data, not an error (GWT-A3): a full day says so in 200,
+    the week screen renders it — no silent loss.
+    """
+
+    plan: DayPlanDto
+    added: list[str]
+    skipped: list[str]
+
+
+class HintDto(BaseModel):
+    """Server computes kind+params only; RU/EN text is the dictionary's job."""
+
+    kind: str
+    params: dict[str, str | int] = Field(default_factory=dict)
+
+
+class RepetitionDueDto(BaseModel):
+    """One due row of the spaced-repetition queue (spec 05 §3.7)."""
+
+    task_id: str
+    title: str
+    interval_idx: int
+    next_due: str
+    overdue_days: int
