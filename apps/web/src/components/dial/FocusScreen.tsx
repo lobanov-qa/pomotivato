@@ -17,11 +17,14 @@ import { Dial } from "@/components/dial/Dial";
 import { ReviewModal } from "@/components/dial/ReviewModal";
 import { SummaryPanel } from "@/components/dial/SummaryPanel";
 import { Button } from "@/components/ui/button";
+import { HintCard } from "@/components/dial/HintCard";
+import { useHints } from "@/features/science/hooks";
 import { useTasks } from "@/features/kanban/hooks";
 import { deriveSlots } from "@/features/kanban/planner";
 import { useSessionEvents } from "@/features/dial/useSessionEvents";
 import { type PhaseName } from "@/features/dial/geometry";
 import { t } from "@/i18n/ru";
+import { cn } from "@/lib/utils";
 
 function today(): string {
   return new Date().toLocaleDateString("en-CA");
@@ -46,8 +49,9 @@ export function FocusScreen() {
     if (!session || anchorMs === null) return 0;
     if (session.state !== "running") return session.remaining_sec; // paused: frozen
     const phase = session.phase;
-    if (phase !== "work" && phase !== "break" && phase !== "long_break") {
-      return session.remaining_sec;
+    if (phase !== "work" && phase !== "break" && phase !== "long_break"
+        && phase !== "special_break") {
+      return session.remaining_sec; // idle/finished/unknown: server value
     }
     return Math.max(
       0,
@@ -73,6 +77,21 @@ export function FocusScreen() {
     const byId = new Map(tasks.map((task) => [task.id, task.title]));
     return (taskId: string | null | undefined): string => (taskId ? byId.get(taskId) ?? "" : "");
   }, [tasks]);
+  const typeOf = useMemo(() => {
+    const byId = new Map(tasks.map((task) => [task.id, task.type]));
+    return (taskId: string | null | undefined) => (taskId ? byId.get(taskId) : undefined);
+  }, [tasks]);
+  const cueOf = useMemo(() => {
+    const byId = new Map(tasks.map((task) => [task.id, task.when_then]));
+    return (taskId: string | null | undefined) => (taskId ? byId.get(taskId) ?? null : null);
+  }, [tasks]);
+  // Habit loop (spec 05 §3.8): a cue under the current legend row when set;
+  // a warning only for habits (normal tasks must not be nagged on /focus).
+  const cueLine = (taskId: string | null | undefined): string | null => {
+    const cue = cueOf(taskId);
+    if (cue) return `${t("dial.habit-cue")}: ${cue}`;
+    return typeOf(taskId) === "habit" ? t("dial.cue-empty") : null;
+  };
 
   const currentTaskTitle = useMemo(() => {
     if (!session?.slots) return "";
@@ -109,13 +128,14 @@ export function FocusScreen() {
 
   const reviewError = useMutation({ mutationFn: api.submitReview });
 
-  async function submitReview(score: number, comment: string | undefined): Promise<void> {
+  async function submitReview(payload: {
+    score: number;
+    comment?: string;
+    recall_notes?: string;
+    reward?: string;
+  }): Promise<void> {
     if (!pendingReview) return;
-    await reviewError.mutateAsync({
-      segment_id: pendingReview.id,
-      score,
-      comment,
-    });
+    await reviewError.mutateAsync({ segment_id: pendingReview.id, ...payload });
     setDismissed((ids) => ids.filter((id) => id !== pendingReview.id));
     await refetch().catch(() => undefined);
   }
@@ -147,8 +167,20 @@ export function FocusScreen() {
   }
 
   const running = Boolean(session && (session.state === "running" || session.state === "paused"));
-  const isBreak = session?.phase === "break" || session?.phase === "long_break";
+  const isBreak =
+    session?.phase === "break" ||
+    session?.phase === "long_break" ||
+    session?.phase === "special_break";
   const paused = session?.state === "paused";
+
+  // Break-time science (spec 05 §3.6): refetch the hint card on every phase
+  // change — the server already knows the live phase and open-block burn.
+  const hintsQuery = useHints(running && isBreak);
+  const phaseForHints = `${sessionId ?? "-"}|${session?.phase ?? "-"}|${workDone}`;
+  useEffect(() => {
+    if (running && isBreak) void hintsQuery.refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phaseForHints]);
 
   return (
     <div className="flex flex-col items-center gap-5" data-testid="dial.screen">
@@ -247,9 +279,25 @@ export function FocusScreen() {
             >
               <span className="font-mono text-xs">{i + 1}</span>
               <span className="truncate">{title}</span>
+              {i === sectorIndex && cueLine(session?.slots?.[i]?.task_id) && (
+                <span
+                  className={cn(
+                    "ml-auto shrink-0 max-w-44 truncate text-[10px]",
+                    cueOf(session?.slots?.[i]?.task_id) === null
+                      ? "text-warning"
+                      : "text-muted-foreground",
+                  )}
+                  data-testid="dial.cue"
+                >
+                  {cueLine(session?.slots?.[i]?.task_id)}
+                </span>
+              )}
             </li>
           ))}
         </ol>
+      )}
+      {isBreak && (
+        <HintCard hints={hintsQuery.data ?? []} titleOf={titleOf} />
       )}
       {session && <ScoreBadge session={session} />}
       <SummaryPanel />
@@ -258,6 +306,7 @@ export function FocusScreen() {
       {pendingReview && (
         <ReviewModal
           taskTitle={titleOf(pendingReview.task_id) || t("dial.phase-work")}
+          taskType={typeOf(pendingReview.task_id) ?? "normal"}
           onSubmit={submitReview}
           onDismiss={() =>
             setDismissed((ids) => [...ids, pendingReview.id])

@@ -100,6 +100,7 @@ describe("display helpers", () => {
     expect(phaseColorVar("work")).toBe("var(--color-work)");
     expect(phaseColorVar("break")).toBe("var(--color-break)");
     expect(phaseColorVar("long_break")).toBe("var(--color-long-break)");
+    expect(phaseColorVar("special_break")).toBe("var(--color-special-break)");
     expect(phaseColorVar(null)).toBe("var(--color-work)");
   });
 });

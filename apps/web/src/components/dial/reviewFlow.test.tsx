@@ -133,6 +133,12 @@ beforeEach(() => {
       });
     }
     if (url.startsWith("/api/tasks")) return json(200, TASKS);
+    if (url.startsWith("/api/hints")) {
+      return json(200, [
+        { kind: "diffuse", params: {} },
+        { kind: "frog", params: { task_id: "t-1" } },
+      ]);
+    }
     if (url === "/api/reviews" && init?.method === "POST") {
       reviewBodies.push(String(init.body));
       current = session({
@@ -180,6 +186,18 @@ describe("review flow on /focus", () => {
 
     expect(await screen.findByTestId("review.modal")).toBeInTheDocument();
     expect(screen.getByTestId("review.task")).toHaveTextContent("Deep work");
+  });
+
+  it("break-time hint card shows after dismissing the review (spec 05 §3.6)", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(await screen.findByTestId("review.dismiss"));
+
+    const card = await screen.findByTestId("hints.card");
+    expect(card).toHaveTextContent("Наука в перерыве");
+    expect(screen.getByTestId("hints.card-diffuse")).toBeInTheDocument();
+    expect(screen.getByTestId("hints.card-frog")).toHaveTextContent("Deep work");
   });
 
   it("submit posts /api/reviews and closes the modal", async () => {

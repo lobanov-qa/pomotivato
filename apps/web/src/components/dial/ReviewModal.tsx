@@ -1,33 +1,51 @@
 /**
- * Review modal (spec 03 §2): score 1..5 + optional comment for the work
- * block that just closed. The FSM never blocks for a review — the timer
- * keeps running behind the overlay; "Позже" dismisses and the block stays
- * reviewable while the session lives (the modal reopens on the next
+ * Review modal (spec 03 §2 + E4b §3.7/3.8): score 1..5 + optional comment
+ * for the work block that just closed; STUDY blocks additionally ask for
+ * active recall (three facts from memory), HABIT blocks — for the reward
+ * (habit-loop closing ritual). The FSM never blocks for a review — the
+ * timer keeps running behind the overlay; "Позже" dismisses and the block
+ * stays reviewable while the session lives (the modal reopens on the next
  * closed-but-unreviewed segment only).
  */
 
 import { useState } from "react";
+import type { TaskType } from "@/api/client";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/input";
+import { Input, Textarea } from "@/components/ui/input";
 import { t } from "@/i18n/ru";
 import { cn } from "@/lib/utils";
 
+export interface ReviewPayload {
+  score: number;
+  comment?: string;
+  recall_notes?: string;
+  reward?: string;
+}
+
 interface Props {
   taskTitle: string;
-  onSubmit: (score: number, comment: string | undefined) => Promise<void>;
+  taskType: TaskType;
+  onSubmit: (payload: ReviewPayload) => Promise<void>;
   onDismiss: () => void;
 }
 
-export function ReviewModal({ taskTitle, onSubmit, onDismiss }: Props) {
+export function ReviewModal({ taskTitle, taskType, onSubmit, onDismiss }: Props) {
   const [score, setScore] = useState<number | null>(null);
   const [comment, setComment] = useState("");
+  const [recall, setRecall] = useState("");
+  const [reward, setReward] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   async function submit(): Promise<void> {
     if (score === null || submitting) return;
     setSubmitting(true);
     try {
-      await onSubmit(score, comment.trim() || undefined);
+      await onSubmit({
+        score,
+        comment: comment.trim() || undefined,
+        recall_notes: taskType === "study" ? recall.trim() || undefined : undefined,
+        reward: taskType === "habit" ? reward.trim() || undefined : undefined,
+      });
     } finally {
       setSubmitting(false);
     }
@@ -76,12 +94,36 @@ export function ReviewModal({ taskTitle, onSubmit, onDismiss }: Props) {
           <span>{t("review.scale-min")}</span>
           <span>{t("review.scale-max")}</span>
         </div>
+        {taskType === "study" && (
+          <label className="mt-4 flex flex-col gap-1 text-left">
+            <span className="text-xs text-muted-foreground">{t("review.recall-label")}</span>
+            <Textarea
+              data-testid="review.recall-notes"
+              placeholder={t("review.recall-placeholder")}
+              value={recall}
+              onChange={(e) => setRecall(e.target.value)}
+            />
+          </label>
+        )}
+        {taskType === "habit" && (
+          <label className="mt-4 flex flex-col gap-1 text-left">
+            <span className="text-xs text-muted-foreground">{t("review.reward-label")}</span>
+            <Input
+              type="text"
+              data-testid="review.reward"
+              placeholder={t("review.reward-placeholder")}
+              maxLength={500}
+              value={reward}
+              onChange={(e) => setReward(e.target.value)}
+            />
+          </label>
+        )}
         <Textarea
           data-testid="review.comment"
           placeholder={t("review.comment-placeholder")}
           value={comment}
           onChange={(e) => setComment(e.target.value)}
-          className="mt-4 text-left"
+          className={taskType === "normal" ? "mt-4 text-left" : "mt-2 text-left"}
         />
         <div className="mt-4 flex justify-center gap-2">
           <Button variant="ghost" data-testid="review.dismiss" onClick={onDismiss}>

@@ -56,6 +56,7 @@ const RU = {
   "dial.phase-work": "Работа",
   "dial.phase-break": "Перерыв",
   "dial.phase-long_break": "Длинный перерыв",
+  "dial.phase-special_break": "Перерыв по часам",
   "dial.phase-idle": "Готов к старту",
   "dial.start": "Старт",
   "dial.pause": "Пауза",
@@ -176,6 +177,30 @@ const RU = {
   "sprint.period-error": "Период 1–14 дней, старт не позже конца",
   "sprint.activate": "Активировать",
   "sprint.complete": "Завершить",
+
+  "hints.card-title": "Наука в перерыве",
+  "hints.kind-diffuse": "Встань и походи — diffuse-режим добирает задачу в фоне.",
+  "hints.kind-interleaving": "Три блока подряд — одна тема. Чередуй задачи.",
+  "hints.kind-overlearning": "По этой задаче сожжено больше, чем запланировано. Хватит или сменить угол?",
+  "hints.kind-einstellung": "Серия прерываний на одной задаче — залип. Смени подход.",
+  "hints.kind-frog": "Лягушка всё ещё не съедена — начни следующий блок с неё.",
+  "hints.task-suffix": "задача",
+
+  "review.recall-label": "Вспомни 3 факта (active recall)",
+  "review.recall-placeholder": "Что удержал в памяти без подглядывания?",
+  "review.reward-label": "Награда за привычку",
+  "review.reward-placeholder": "Чем отметишь сделанное?",
+
+  "dial.habit-cue": "Якорь",
+  "dial.cue-empty": "план «если → то» не задан",
+
+  "week.due-title": "На повторение сегодня",
+  "week.due-empty": "Очередь повторений пуста",
+  "week.due-overdue": "просрочено на",
+  "week.due-add": "в план дня",
+  "week.due-interval": "шаг",
+  "week.due-added": "добавлено в план",
+  "week.due-skipped": "не влезло (нет секторов)",
 } as const;
 
 export type MessageKey = keyof typeof RU;
