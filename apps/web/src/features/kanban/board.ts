@@ -5,6 +5,7 @@
  */
 
 import type { TaskDto, TaskStatus } from "@/api/client";
+import type { MessageKey } from "@/i18n/ru";
 
 /** The four playable columns (archived has no lane; delete returns to backlog). */
 export const BOARD_COLUMNS = ["backlog", "planned", "doing", "done"] as const;
@@ -35,6 +36,18 @@ export function applyMove(tasks: TaskDto[], id: string, to: TaskStatus): TaskDto
 /** Cards for one column, in server order (created_at,asc — list order). */
 export function columnOf(tasks: TaskDto[], column: BoardColumn): TaskDto[] {
   return tasks.filter((task) => task.status === column);
+}
+
+/**
+ * DF1 (spec 06): a rejected delete must say why in the user's language.
+ * Maps the server message to a dictionary key; the EN server text stays
+ * the source of truth, this is presentation-only routing.
+ */
+export function deleteErrorKey(message: string): MessageKey {
+  if (message.includes("still has children")) return "kanban.delete-blocked-children";
+  if (message.includes("is planned on")) return "kanban.delete-blocked-planned";
+  if (message.includes("only backlog/archived")) return "kanban.delete-blocked-status";
+  return "kanban.delete-failed";
 }
 
 /**

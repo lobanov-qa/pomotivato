@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TaskDto } from "@/api/client";
-import { applyMove, BOARD_COLUMNS, canDrop, columnOf, dropTarget } from "./board";
+import { applyMove, BOARD_COLUMNS, canDrop, columnOf, deleteErrorKey, dropTarget } from "./board";
 
 /**
  * Board rules (spec 03 §2 + V7 mirror): test design — decision table over
@@ -86,5 +86,16 @@ describe("optimistic move", () => {
     for (const column of BOARD_COLUMNS) {
       expect(columnOf(tasks, column)).toEqual([]);
     }
+  });
+
+  it("routes each server delete refusal to its own RU key (DF1)", () => {
+    expect(deleteErrorKey("task 'x' still has children")).toBe("kanban.delete-blocked-children");
+    expect(deleteErrorKey("task 'x' is planned on ['2026-09-10']")).toBe(
+      "kanban.delete-blocked-planned",
+    );
+    expect(deleteErrorKey("only backlog/archived tasks can be deleted, doing survives")).toBe(
+      "kanban.delete-blocked-status",
+    );
+    expect(deleteErrorKey("something else entirely")).toBe("kanban.delete-failed");
   });
 });

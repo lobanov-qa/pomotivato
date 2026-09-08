@@ -115,6 +115,30 @@ describe("KanbanScreen", () => {
     expect(screen.queryByTestId("planner.slot-3")).not.toBeInTheDocument();
   });
 
+  it("refuses a blocked delete and explains it in RU (DF1)", async () => {
+    const user = userEvent.setup();
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/tasks/a" && init?.method === "DELETE") {
+        return jsonResponse(409, {
+          detail: { code: "conflict", message: "task 'a' is planned on ['2026-09-10']" },
+        });
+      }
+      if (url.startsWith("/api/tasks")) return jsonResponse(200, BOARD);
+      if (url.startsWith("/api/day-plans/")) {
+        return jsonResponse(200, { id: "p", date: "2026-09-05", slots: [] });
+      }
+      if (url === "/api/frog") return jsonResponse(200, { task_id: frogId });
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    renderScreen();
+
+    await user.click(await screen.findByTestId("kanban.edit-toggle-backlog"));
+    await user.click(await screen.findByTestId("task-card.delete-a"));
+
+    expect(await screen.findByTestId("kanban.conflict-toast")).toHaveTextContent("стоит в плане");
+  });
+
   it("creates a task from the quick-add form via POST", async () => {
     const user = userEvent.setup();
     fetchMock.mockImplementation(

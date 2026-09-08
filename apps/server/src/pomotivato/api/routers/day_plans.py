@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import date
+from http import HTTPStatus
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
 from pomotivato.api.deps import ClockDep, DbSession
 from pomotivato.api.schemas import AddResultDto, DayPlanAddDto, DayPlanDto, MoveSlotDto
@@ -35,6 +36,25 @@ async def move_slot(plan_date: date, dto: MoveSlotDto, session: DbSession) -> Da
     service = DayPlanService(session)
     moved = await service.move(plan_date, dto.from_pos, dto.to_pos)
     return DayPlanDto.from_core(moved)
+
+
+@router.delete("/{plan_date}/slots/{sector}", response_model=DayPlanDto)
+async def remove_slot(
+    plan_date: date, sector: int, session: DbSession, clock: ClockDep
+) -> DayPlanDto:
+    """Take one task off the day (spec 06 DF1): the week screen's ×."""
+    service = DayPlanService(session)
+    plan = await service.remove_slot(plan_date, sector, clock.now().date())
+    return DayPlanDto.from_core(plan)
+
+
+@router.delete("/{plan_date}", status_code=204)
+async def clear_day_plan(plan_date: date, session: DbSession, clock: ClockDep) -> Response:
+    """Forget the whole day (spec 06 DF1): the kanban calls it when the
+    doing column empties, so ghost slots stop blocking card deletion."""
+    service = DayPlanService(session)
+    await service.clear(plan_date, clock.now().date())
+    return Response(status_code=HTTPStatus.NO_CONTENT)
 
 
 @router.post("/{plan_date}/add", response_model=AddResultDto)

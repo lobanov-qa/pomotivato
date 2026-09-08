@@ -86,6 +86,45 @@ class DayPlanService:
         await self._persist(outcome.plan)
         return outcome.plan, outcome
 
+    async def remove_slot(self, day: date, sector: int, today: date) -> DayPlan:
+        """Take one task off the day (spec 06 DF1: the week screen's ×).
+
+        Past dates are refused (⚑ Q4); an unknown sector is a no-op return
+        so a double-click cannot 500. The emptied plan goes away with the
+        last slot (clear semantics), so the day stops claiming it.
+        """
+        if day < today:
+            msg = f"day plan for {day.isoformat()} is in the past"
+            raise ValidationError(msg)
+        plan = await self._plan_by_date(day)
+        kept = tuple(
+            Slot(sector=index + 1, task_id=slot.task_id)
+            for index, slot in enumerate(s for s in plan.slots if s.sector != sector)
+        )
+        if len(kept) == len(plan.slots):
+            return plan
+        if not kept:
+            await self._plans.drop_or_empty(plan)
+            await self._session.flush()
+            return replace(plan, slots=())
+        await self._persist(replace(plan, slots=kept))
+        return replace(plan, slots=kept)
+
+    async def clear(self, day: date, today: date) -> None:
+        """Forget the day's plan entirely (spec 06 DF1: empty doing-column).
+
+        The kanban derives today's plan from the doing column; when it
+        empties, the leftover slots are ghosts that block the cards'
+        deletion. Past dates stay untouched (⚑ Q4).
+        """
+        if day < today:
+            msg = f"day plan for {day.isoformat()} is in the past"
+            raise ValidationError(msg)
+        plan = await self._plans.get_by_date(day)
+        if plan is not None:
+            await self._plans.drop_or_empty(plan)
+            await self._session.flush()
+
     async def _ensure_plan(self, day: date) -> DayPlan:
         plan = await self._plans.get_by_date(day)
         if plan is None:
