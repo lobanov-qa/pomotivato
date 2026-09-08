@@ -269,3 +269,59 @@ def test_frog_endpoint_ignores_done_tasks(http_client):
         client.post("/api/tasks/t-frog/status", json={"to": to})
 
     assert client.get("/api/frog").json() == {"task_id": None}
+
+
+@pytest.mark.api
+def test_review_delivers_recall_notes_and_reward_persisted(http_client):
+    """E4b PR6a: ReviewCreateDto fields must reach the DB, not be dropped
+    at the FSM boundary (recall_notes/reward lived in core since E2)."""
+    client, clock = http_client
+    make_task(client, "t-note", type="study")
+    plan_for(client, TODAY, [{"sector": 1, "task_id": "t-note"}])
+    session = client.post(
+        "/api/sessions", json={"day_plan_id": f"plan-{TODAY}", "settings": FAST}
+    ).json()
+    segment_id = session["timeline"][0]["id"]
+    clock.advance(timedelta(minutes=11))
+    client.get(f"/api/sessions/{session['id']}")  # catch-up closes the block
+
+    created = client.post(
+        "/api/reviews",
+        json={
+            "segment_id": segment_id,
+            "score": 4,
+            "comment": "ok",
+            "recall_notes": "three facts: A, B, C",
+            "reward": "coffee ☕",
+        },
+    )
+
+    assert created.status_code == HTTPStatus.CREATED
+    body = created.json()
+    assert body["recall_notes"] == "three facts: A, B, C"
+    assert body["reward"] == "coffee ☕"
+    # persistence proof via a stopped session: rows re-read from disk
+    client.post(f"/api/sessions/{session['id']}/stop")
+    fetched = client.get(f"/api/sessions/{session['id']}").json()
+    review = next(r for r in fetched["reviews"] if r["segment_id"] == segment_id)
+    assert review["recall_notes"] == "three facts: A, B, C"
+    assert review["reward"] == "coffee ☕"
+
+
+@pytest.mark.api
+def test_review_without_new_fields_keeps_e3_shape(http_client):
+    client, clock = http_client
+    make_task(client, "t-plain")
+    plan_for(client, TODAY, [{"sector": 1, "task_id": "t-plain"}])
+    session = client.post(
+        "/api/sessions", json={"day_plan_id": f"plan-{TODAY}", "settings": FAST}
+    ).json()
+    segment_id = session["timeline"][0]["id"]
+    clock.advance(timedelta(minutes=11))
+    client.get(f"/api/sessions/{session['id']}")
+
+    created = client.post("/api/reviews", json={"segment_id": segment_id, "score": 3})
+
+    assert created.status_code == HTTPStatus.CREATED
+    assert created.json()["recall_notes"] is None
+    assert created.json()["reward"] is None

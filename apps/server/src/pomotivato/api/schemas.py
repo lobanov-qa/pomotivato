@@ -196,6 +196,9 @@ class ReviewCreateDto(BaseModel):
     segment_id: str
     score: int
     comment: str | None = None
+    # E4b payload (spec 05 §3.7-3.8): active-recall notes, habit reward.
+    recall_notes: str | None = None
+    reward: str | None = None
 
 
 class SessionDto(BaseModel):
