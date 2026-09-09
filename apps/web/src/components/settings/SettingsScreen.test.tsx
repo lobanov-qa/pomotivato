@@ -21,7 +21,7 @@ const SETTINGS = {
     warmup_min: 0,
     special_breaks: [],
   },
-  ui: { max_in_work: 6, theme: "auto" as const, require_science_fields: false },
+  ui: { max_in_work: 6, theme: "auto" as const, require_science_fields: false, wet_hints: true },
 };
 
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -152,6 +152,21 @@ describe("SettingsScreen", () => {
     await waitFor(() => expect(puts).toHaveLength(2));
     expect(puts.find((x) => x.url === "/api/settings/ui")?.body).toMatchObject({
       require_science_fields: true,
+    });
+  });
+
+  it("toggles the DF6 wet-hints switch independently of the V8 gate", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByTestId("settings.switch-wet-hints");
+
+    await user.click(screen.getByTestId("settings.switch-wet-hints"));
+    await user.click(screen.getByTestId("settings.save"));
+
+    await waitFor(() => expect(puts).toHaveLength(2));
+    expect(puts.find((x) => x.url === "/api/settings/ui")?.body).toMatchObject({
+      wet_hints: false,
+      require_science_fields: false, // the hard gate stays untouched
     });
   });
 

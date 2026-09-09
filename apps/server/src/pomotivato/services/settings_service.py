@@ -34,6 +34,10 @@ class UiSettings:
     max_in_work: int = DEFAULT_MAX_IN_WORK
     theme: Theme = DEFAULT_THEME
     require_science_fields: bool = False
+    # DF6 (spec 06): amber rings that nag about unfilled science fields —
+    # on by default, off for the timer-first crowd. Presentation-only:
+    # the V8 hard gate (require_science_fields) is a different switch.
+    wet_hints: bool = True
 
 
 class SettingsService:
@@ -53,7 +57,7 @@ class SettingsService:
         await self._repo.set(SESSION_SETTINGS_KEY, json.dumps(to_dict(settings)))
 
     async def get_ui_settings(self) -> UiSettings:
-        """(max_in_work, theme, require_science_fields) with defaults."""
+        """(max_in_work, theme, require_science_fields, wet_hints) + defaults."""
         raw = await self._repo.get(UI_SETTINGS_KEY)
         if raw is None:
             return UiSettings(DEFAULT_MAX_IN_WORK, DEFAULT_THEME, False)
@@ -64,10 +68,15 @@ class SettingsService:
             max_in_work,
             theme if theme in ("auto", "light", "dark") else DEFAULT_THEME,
             bool(data.get("require_science_fields", False)),
+            bool(data.get("wet_hints", True)),
         )
 
     async def put_ui_settings(
-        self, max_in_work: int, theme: Theme, require_science_fields: bool = False
+        self,
+        max_in_work: int,
+        theme: Theme,
+        require_science_fields: bool = False,
+        wet_hints: bool = True,
     ) -> None:
         if not 1 <= max_in_work <= 12:
             msg = f"max_in_work must be 1..12, got {max_in_work}"
@@ -82,6 +91,7 @@ class SettingsService:
                     "max_in_work": max_in_work,
                     "theme": theme,
                     "require_science_fields": bool(require_science_fields),
+                    "wet_hints": bool(wet_hints),
                 }
             ),
         )
@@ -93,4 +103,4 @@ class SettingsService:
     async def set_require_science_fields(self, value: bool) -> None:
         """Write-through to the ui blob (the old key is retired, ⚑ 05 F1)."""
         ui = await self.get_ui_settings()
-        await self.put_ui_settings(ui.max_in_work, ui.theme, bool(value))
+        await self.put_ui_settings(ui.max_in_work, ui.theme, bool(value), ui.wet_hints)

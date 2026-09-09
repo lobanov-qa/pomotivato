@@ -253,6 +253,34 @@ function SettingsForm({ settings }: { settings: SettingsBundleDto }) {
             />
           </button>
         </label>
+        {/* DF6 (spec 06): presentation-only nag switch — the hard V8 gate
+            above is a different law, do not merge their wordings. */}
+        <label className="flex items-center justify-between gap-3">
+          <span className="text-sm">
+            {t("settings.wet-hints")}
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              {t("settings.wet-hints-hint")}
+            </span>
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={uiDraft.wet_hints}
+            data-testid="settings.switch-wet-hints"
+            onClick={() => setUiDraft({ ...uiDraft, wet_hints: !uiDraft.wet_hints })}
+            className={cn(
+              "relative h-6 w-11 shrink-0 rounded-full border transition-colors",
+              uiDraft.wet_hints ? "border-primary bg-primary" : "bg-muted",
+            )}
+          >
+            <span
+              className={cn(
+                "absolute top-0.5 h-4.5 w-4.5 rounded-full bg-card shadow transition-all",
+                uiDraft.wet_hints ? "left-6" : "left-0.5",
+              )}
+            />
+          </button>
+        </label>
       </section>
 
       <div className="flex items-center gap-3">

@@ -56,10 +56,24 @@ beforeEach(() => {
     if (url === "/api/frog") {
       return jsonResponse(200, { task_id: frogId });
     }
+    if (url === "/api/settings") {
+      return jsonResponse(200, SETTINGS_ON);
+    }
     throw new Error(`unexpected fetch: ${url}`);
   });
   vi.stubGlobal("fetch", fetchMock);
 });
+
+const SETTINGS_ON = {
+  session: {
+    work_min: 25,
+    break_min: 5,
+    long_break_min: 15,
+    long_break_every: 4,
+    auto_start_next: true,
+  },
+  ui: { max_in_work: 6, theme: "auto", require_science_fields: false, wet_hints: true },
+};
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -96,7 +110,7 @@ describe("KanbanScreen", () => {
     expect(screen.queryByText(/Archived/)).not.toBeInTheDocument();
   });
 
-  it("shows card meta line when not editing (type/quadrant/blocks)", async () => {
+  it("shows card meta line on the face (type/quadrant/blocks)", async () => {
     renderScreen();
 
     await screen.findByTestId("task-card.root-b");
@@ -134,8 +148,8 @@ describe("KanbanScreen", () => {
     });
     renderScreen();
 
-    await user.click(await screen.findByTestId("kanban.edit-toggle-backlog"));
-    await user.click(await screen.findByTestId("task-card.delete-a"));
+    await user.click(await screen.findByTestId("task-card.edit-a"));
+    await user.click(await screen.findByTestId("task-panel.delete-a"));
 
     expect(await screen.findByTestId("kanban.conflict-toast")).toHaveTextContent("стоит в плане");
   });
@@ -158,8 +172,8 @@ describe("KanbanScreen", () => {
     });
     renderScreen();
 
-    await user.click(await screen.findByTestId("kanban.edit-toggle-done"));
-    await user.click(await screen.findByTestId("task-card.clone-d"));
+    await user.click(await screen.findByTestId("task-card.edit-d"));
+    await user.click(await screen.findByTestId("task-panel.clone-d"));
 
     expect(posts).toEqual(["/api/tasks/d/clone"]);
   });
@@ -205,19 +219,34 @@ describe("KanbanScreen", () => {
     });
   });
 
-  it("column edit toggle swaps cards into the edit form", async () => {
+  it("opens the side panel for ONE card (DF2 replaces column-wide edit)", async () => {
     const user = userEvent.setup();
     renderScreen();
     await screen.findByTestId("task-card.root-a");
 
-    await user.click(screen.getByTestId("kanban.edit-toggle-backlog"));
+    await user.click(screen.getByTestId("task-card.edit-a"));
 
-    expect(screen.getByTestId("task-card.title-a")).toHaveValue("Backlog card");
-    expect(screen.getByTestId("task-card.quadrant-a")).toBeInTheDocument();
-    // drag grips switch off while the column is in edit mode (dnd-kit marks
-    // the listener node aria-disabled; invisible is a Tailwind class jsdom
-    // cannot compute)
-    expect(screen.getByTestId("task-card.grip-a")).toHaveAttribute("aria-disabled", "true");
+    const panel = await screen.findByTestId("task-panel.root-a");
+    expect(panel).toBeInTheDocument();
+    expect(screen.getByTestId("task-panel.title-a")).toHaveValue("Backlog card");
+    expect(screen.getByTestId("task-panel.quadrant-a")).toBeInTheDocument();
+    // the other card never gets a form: editing is per-card now
+    expect(screen.queryByTestId("task-panel.root-c")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("task-panel.close"));
+    expect(screen.queryByTestId("task-panel.root-a")).not.toBeInTheDocument();
+  });
+
+  it("Esc closes the card panel (U2 overlay law)", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByTestId("task-card.root-a");
+
+    await user.click(screen.getByTestId("task-card.edit-a"));
+    await screen.findByTestId("task-panel.root-a");
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByTestId("task-panel.root-a")).not.toBeInTheDocument();
   });
 
   it("wet-hint marks only scheduled cards with a blank when_then", async () => {
@@ -230,6 +259,28 @@ describe("KanbanScreen", () => {
     expect(screen.queryByTestId("task-card.wt-hint-d")).not.toBeInTheDocument(); // done: no ring
   });
 
+  it("wet-hint rings switch off when the server says so (DF6)", async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/settings") {
+        return jsonResponse(200, {
+          ...SETTINGS_ON,
+          ui: { ...SETTINGS_ON.ui, wet_hints: false },
+        });
+      }
+      if (url.startsWith("/api/tasks")) return jsonResponse(200, BOARD);
+      if (url.startsWith("/api/day-plans/")) {
+        return jsonResponse(200, { id: "p", date: "2026-09-05", slots: [] });
+      }
+      if (url === "/api/frog") return jsonResponse(200, { task_id: frogId });
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    renderScreen();
+    await screen.findByTestId("task-card.root-b");
+
+    expect(screen.queryByTestId("task-card.wt-hint-b")).not.toBeInTheDocument();
+  });
+
   it("frog badge lights the server-computed candidate", async () => {
     frogId = "b";
     renderScreen();
@@ -240,13 +291,14 @@ describe("KanbanScreen", () => {
     frogId = null;
   });
 
-  it("edit mode hides the science hint rows (forms own the fields)", async () => {
+  it("wet-hint stays on the card face while its panel is open (DF2)", async () => {
     const user = userEvent.setup();
     renderScreen();
     await screen.findByTestId("task-card.wt-hint-b");
 
-    await user.click(screen.getByTestId("kanban.edit-toggle-planned"));
+    await user.click(screen.getByTestId("task-card.edit-b"));
 
-    expect(screen.queryByTestId("task-card.wt-hint-b")).not.toBeInTheDocument();
+    expect(screen.getByTestId("task-card.wt-hint-b")).toBeInTheDocument();
+    expect(screen.getByTestId("task-panel.root-b")).toBeInTheDocument();
   });
 });

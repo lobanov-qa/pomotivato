@@ -301,11 +301,13 @@ ThemeName = Literal["auto", "light", "dark"]
 
 class UiSettingsDto(BaseModel):
     """UI-only settings (spec 03 §5, ⚑ Q3/Q9): in-work capacity + theme
-    + the V8 science-fields gate (spec 05 §3.1 — the toggle is ui-truth)."""
+    + the V8 science-fields gate (spec 05 §3.1 — the toggle is ui-truth)
+    + the DF6 wet-hints ring switch."""
 
     max_in_work: int = Field(default=6, ge=1, le=12)
     theme: ThemeName = "auto"
     require_science_fields: bool = False
+    wet_hints: bool = True
 
 
 class SettingsBundleDto(BaseModel):

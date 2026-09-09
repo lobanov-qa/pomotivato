@@ -53,6 +53,7 @@ export interface UiSettingsDto {
   max_in_work: number;
   theme: ThemeName;
   require_science_fields: boolean;
+  wet_hints: boolean;
 }
 
 export interface SettingsBundleDto {

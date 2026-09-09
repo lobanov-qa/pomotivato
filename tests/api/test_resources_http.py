@@ -226,7 +226,12 @@ def test_settings_roundtrip_and_v5_rejection(http_app):
             "warmup_min": 0,
             "special_breaks": [],
         },
-        "ui": {"max_in_work": 6, "theme": "auto", "require_science_fields": False},
+        "ui": {
+            "max_in_work": 6,
+            "theme": "auto",
+            "require_science_fields": False,
+            "wet_hints": True,
+        },
     }
 
     ok = http_app.put(
@@ -264,7 +269,12 @@ def test_ui_settings_roundtrip_keeps_session_key(http_app):
     after = http_app.get("/api/settings").json()
 
     assert ok.status_code == HTTPStatus.OK
-    assert after["ui"] == {"max_in_work": 9, "theme": "dark", "require_science_fields": False}
+    assert after["ui"] == {
+        "max_in_work": 9,
+        "theme": "dark",
+        "require_science_fields": False,
+        "wet_hints": True,
+    }
     assert after["session"] == before  # keys are independent (spec 03 §9)
 
 
@@ -276,6 +286,37 @@ def test_ui_settings_rejects_capacity_outside_1_12(http_app):
 
     after = http_app.get("/api/settings").json()
     assert after["ui"]["max_in_work"] == 6  # default untouched
+
+
+@pytest.mark.api
+def test_ui_wet_hints_toggles_off_and_back_when_timer_first(http_app):
+    """DF6 (spec 06): the amber science-ring switch is a persisted ui flag."""
+    off = http_app.put(
+        "/api/settings/ui",
+        json={
+            "max_in_work": 6,
+            "theme": "auto",
+            "require_science_fields": False,
+            "wet_hints": False,
+        },
+    )
+    assert off.status_code == HTTPStatus.OK
+
+    after = http_app.get("/api/settings").json()
+    assert after["ui"]["wet_hints"] is False
+    # the hard V8 gate is a different switch — off must not flip it on
+    assert after["ui"]["require_science_fields"] is False
+
+    on = http_app.put(
+        "/api/settings/ui",
+        json={
+            "max_in_work": 6,
+            "theme": "auto",
+            "require_science_fields": False,
+            "wet_hints": True,
+        },
+    )
+    assert on.json()["wet_hints"] is True
 
 
 @pytest.mark.api
