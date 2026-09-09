@@ -62,9 +62,16 @@ class FsmRegistry:
         self._by_id.pop(session_id, None)
 
     def latest_active(self) -> str | None:
-        """Most recently started still-live session id (spec 03 /api/status)."""
+        """Most recently started not-yet-over session id (spec 03 /api/status).
+
+        A COMPLETED session still counts while finished blocks await their
+        verdict (DF10 dogfood fix): the review window — and with it the
+        auto-done trigger — must outlive the timer.
+        """
         for fsm in reversed(list(self._by_id.values())):
-            if fsm.state in (SessionState.RUNNING, SessionState.PAUSED):
+            if fsm.state in (SessionState.RUNNING, SessionState.PAUSED) or (
+                fsm.state is SessionState.COMPLETED and fsm.awaiting_review
+            ):
                 return fsm.session.id
         return None
 

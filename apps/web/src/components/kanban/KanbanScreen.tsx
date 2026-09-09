@@ -29,6 +29,8 @@ import {
 } from "@/features/kanban/hooks";
 import { deriveSlots, planIdForDate } from "@/features/kanban/planner";
 import { isFrogCard, needsWhenThen } from "@/features/kanban/science";
+import { sprintDays } from "@/features/kanban/recurrence";
+import { useSprints } from "@/features/sprints/hooks";
 import { useUiSettings } from "@/features/settings/hooks";
 import { t } from "@/i18n/ru";
 import { cn } from "@/lib/utils";
@@ -42,6 +44,7 @@ export function KanbanScreen() {
   const { tasks, byId, error: loadError, isLoading } = useTasks();
   const { data: frog } = useFrogId();
   const { data: settings } = useUiSettings();
+  const { active: activeSprint } = useSprints();
   // DF6 (spec 06): the amber nag rings honour the switch; until settings
   // load (or if the server is down) the current behavior (on) holds.
   const wetEnabled = settings?.ui.wet_hints ?? true;
@@ -70,6 +73,16 @@ export function KanbanScreen() {
     const doing = tasks.filter((task) => task.status === "doing");
     return deriveSlots(doing);
   }, [tasks]);
+
+  /** DF8: the sprint-day tick row (labels in the board's dd.MM form). */
+  const repeatDays = useMemo(
+    () =>
+      sprintDays(activeSprint).map((iso) => ({
+        iso,
+        label: `${iso.slice(8)}.${iso.slice(5, 7)}`,
+      })),
+    [activeSprint],
+  );
 
   /** Re-PUT the derived day plan after any doing-column change. */
   async function syncPlan(): Promise<void> {
@@ -245,6 +258,7 @@ export function KanbanScreen() {
         <TaskPanel
           task={panelTask}
           parents={tasks}
+          sprintDays={repeatDays}
           onChange={onFieldChange}
           onDelete={(id) => void onDelete(id)}
           onClone={(id) =>

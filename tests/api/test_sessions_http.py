@@ -291,3 +291,105 @@ def test_commands_404_when_session_never_existed(http_session):
 
     assert response.status_code == HTTPStatus.NOT_FOUND
     assert_detail_code(response, "not_found")
+
+
+@pytest.mark.api
+def test_scored_block_with_future_ticks_returns_card_to_planned(http_session):
+    """DF11: after scoring, a recurring card walks itself back to planned."""
+    client, clock = http_session
+    client.post(
+        "/api/tasks",
+        json={
+            "id": "t-loop",
+            "title": "English",
+            "recurrence": {
+                "kind": "on_dates",
+                "days": [
+                    DEFAULT_MOMENT.date().isoformat(),
+                    (DEFAULT_MOMENT.date() + timedelta(days=2)).isoformat(),
+                ],
+            },
+        },
+    )
+    plan = {
+        "id": "p-loop",
+        "date": DEFAULT_MOMENT.date().isoformat(),
+        "slots": [{"sector": 1, "task_id": "t-loop"}],
+    }
+    client.put(f"/api/day-plans/{plan['date']}", json=plan)
+    client.post("/api/tasks/t-loop/status", json={"to": "planned"})
+    client.post("/api/tasks/t-loop/status", json={"to": "doing"})
+    session_id = _start(client, FAST)["id"]
+    clock.advance(timedelta(minutes=10))
+    segment_id = client.get(f"/api/sessions/{session_id}").json()["timeline"][0]["id"]
+
+    client.post("/api/reviews", json={"segment_id": segment_id, "score": 4})
+    task = client.get("/api/tasks/t-loop").json()
+
+    assert task["status"] == "planned"  # not done: a tick lies ahead (day +2)
+
+
+@pytest.mark.api
+def test_scored_last_block_closes_single_run_card_as_done(http_session):
+    """DF10: no future ticks — the score is the verdict, the card is done."""
+    client, clock = http_session
+    client.post("/api/tasks/t-1/status", json={"to": "planned"})
+    client.post("/api/tasks/t-1/status", json={"to": "doing"})
+    session_id = _start(client, FAST)["id"]  # t-1 is Once() from the fixture
+    clock.advance(timedelta(minutes=10))
+    segment_id = client.get(f"/api/sessions/{session_id}").json()["timeline"][0]["id"]
+
+    client.post("/api/reviews", json={"segment_id": segment_id, "score": 5})
+    task = client.get("/api/tasks/t-1").json()
+
+    assert task["status"] == "done"
+
+
+@pytest.mark.api
+def test_unreviewed_close_leaves_the_card_in_doing(http_session):
+    """The verdict rides the score, not the timer: dismiss keeps doing."""
+    client, clock = http_session
+    client.post("/api/tasks/t-1/status", json={"to": "planned"})
+    client.post("/api/tasks/t-1/status", json={"to": "doing"})
+    _start(client, FAST)
+    clock.advance(timedelta(minutes=10))
+
+    task = client.get("/api/tasks/t-1").json()
+
+    assert task["status"] == "doing"
+
+
+@pytest.mark.api
+def test_completed_session_stays_reported_until_last_block_reviewed(http_session):
+    """Dogfood fix: the review must outlive the timer on the last block.
+
+    When the final work segment closes, the session COMPLETES — but the
+    scoring window used to vanish with it (status drops the session), so
+    the day's last card could never get its verdict and stayed in doing.
+    Status must keep reporting a COMPLETED session while unreviewed
+    blocks remain; reviews still land; the last score closes the day.
+    """
+    client, clock = http_session
+    for task_id in ("t-1", "t-2"):  # both were worked today: verdicts owed
+        client.post(f"/api/tasks/{task_id}/status", json={"to": "planned"})
+        client.post(f"/api/tasks/{task_id}/status", json={"to": "doing"})
+    session_id = _start(client, FAST)["id"]  # plan has t-1, t-2
+    clock.advance(timedelta(minutes=25))  # work1 + break + work2 -> completed
+
+    st = client.get("/api/status").json()
+    assert st["active"] is True and st["session_id"] == session_id
+
+    works = [
+        s["id"]
+        for s in client.get(f"/api/sessions/{session_id}").json()["timeline"]
+        if s["phase"] == "work"
+    ]
+    first = client.post("/api/reviews", json={"segment_id": works[0], "score": 3})
+    assert first.status_code == HTTPStatus.CREATED  # accepted post-completion
+    assert client.get("/api/status").json()["active"] is True  # one left
+
+    second = client.post("/api/reviews", json={"segment_id": works[1], "score": 4})
+    assert second.status_code == HTTPStatus.CREATED
+
+    assert client.get("/api/status").json()["active"] is False  # day is done
+    assert client.get("/api/tasks/t-2").json()["status"] == "done"

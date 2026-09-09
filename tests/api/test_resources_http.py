@@ -356,3 +356,39 @@ def test_no_timer_roundtrips_via_create_and_patch(http_app):
 
     assert patched.json()["no_timer"] is False
     assert fetched.json()["no_timer"] is False
+
+
+@pytest.mark.api
+def test_patch_recurrence_roundtrip_and_empty_days_rejected(http_app):
+    """DF8 over HTTP: checkboxes save via PATCH; zero ticks must not pass."""
+    http_app.post("/api/tasks", json=_task_payload())
+
+    ok = http_app.patch(
+        "/api/tasks/task-100",
+        json={"recurrence": {"kind": "on_dates", "days": ["2026-09-09", "2026-09-11"]}},
+    )
+    fetched = http_app.get("/api/tasks/task-100")
+
+    assert ok.status_code == HTTPStatus.OK
+    assert ok.json()["recurrence"] == {
+        "kind": "on_dates",
+        "days": ["2026-09-09", "2026-09-11"],
+    }
+    assert fetched.json()["recurrence"]["kind"] == "on_dates"
+
+    blank = http_app.patch(
+        "/api/tasks/task-100", json={"recurrence": {"kind": "on_dates", "days": []}}
+    )
+    assert blank.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.api
+def test_task_list_carries_blocks_done_progress(http_app):
+    """DF10 over HTTP: GET /api/tasks ships the counted blocks per card."""
+    http_app.post("/api/tasks", json=_task_payload())
+
+    listed = http_app.get("/api/tasks").json()
+
+    assert listed[0]["blocks_done"] == 0  # fresh card: nothing worked yet
+    single = http_app.get("/api/tasks/task-100")
+    assert single.json()["blocks_done"] is None  # detail view: not a board concern

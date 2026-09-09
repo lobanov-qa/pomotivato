@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from enum import StrEnum
 from typing import Any
 
@@ -82,8 +82,20 @@ class WeeklyCount:
     start: date
 
 
+@dataclass(frozen=True, slots=True)
+class OnDates:
+    """DF8 (spec 06): explicit calendar dates — the sprint-day checkboxes.
+
+    The author's model: no recurrence formulas in the UI, just ticked
+    days ("english on Mon/Wed/Fri"). Max 14 days mirrors the sprint cap;
+    the card auto-returns to planned while future ticks remain (DF11).
+    """
+
+    days: frozenset[date]
+
+
 # A task repeats in exactly one of these modes (spec 01 §2).
-Recurrence = Once | Daily | WeeklyDays | WeeklyCount
+Recurrence = Once | Daily | WeeklyDays | WeeklyCount | OnDates
 
 # Dial has 1..12 sectors by default (master §2.2#3); 6 is a UI default,
 # the core always allows the full range.
@@ -120,6 +132,23 @@ class Task:
     # DF13 (spec 06): board-only errand (call, pick up) — no timer, no
     # report, no dial: lives on the kanban and never fills the funnel.
     no_timer: bool = False
+
+    def repeat_days_ahead(self, today: date) -> tuple[date, ...]:
+        """DF11 (spec 06): ticked/recurring days strictly after `today`.
+
+        Drives the post-review auto-transition: a timer card with future
+        repeat days returns to planned (progress 2 of 5 lives here — the
+        worked days are history, the remaining ticks are the plan); with
+        none it is genuinely done. Once never expands, so single-run
+        cards always close. schedule.expand_recurrence is the one owner
+        of "which days" (browser/activation/here agree by construction).
+        """
+        from pomotivato.core.schedule import expand_recurrence  # late import: no cycle
+
+        if isinstance(self.recurrence, Once):
+            return ()
+        horizon = today + timedelta(days=MAX_ON_DATES + 7)
+        return tuple(d for d in expand_recurrence(self.recurrence, today, horizon) if d > today)
 
 
 @dataclass(frozen=True, slots=True)
@@ -301,7 +330,8 @@ def _opt(raw: Any, fn: Any) -> Any:
     return None if raw is None else fn(raw)
 
 
-_RECURRENCE_TAGS = {"once", "daily", "weekly_days", "weekly_count"}
+_RECURRENCE_TAGS = {"once", "daily", "weekly_days", "weekly_count", "on_dates"}
+MAX_ON_DATES = 14  # sprint cap (V14): a checkbox row never exceeds the band
 
 
 def recurrence_to_dict(rec: Recurrence) -> dict[str, Any]:
@@ -312,6 +342,7 @@ def recurrence_to_dict(rec: Recurrence) -> dict[str, Any]:
         Daily: "daily",
         WeeklyDays: "weekly_days",
         WeeklyCount: "weekly_count",
+        OnDates: "on_dates",
     }
     data["kind"] = tag_map[type(rec)]
     return data
@@ -330,6 +361,8 @@ def recurrence_from_dict(data: Mapping[str, Any]) -> Recurrence:
     if kind == "weekly_days":
         days = frozenset(_require(data, "weekdays"))
         return WeeklyDays(days)
+    if kind == "on_dates":
+        return OnDates(frozenset(_parse_date(d, "days") for d in _require(data, "days")))
     return WeeklyCount(
         n=int(_require(data, "n")),
         start=_parse_date(_require(data, "start"), "start"),

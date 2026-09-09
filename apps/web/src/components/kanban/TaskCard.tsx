@@ -2,6 +2,7 @@ import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Pencil } from "lucide-react";
 import type { TaskDto, TaskStatus } from "@/api/client";
+import { progressOf } from "@/features/kanban/recurrence";
 import { t } from "@/i18n/ru";
 import { cn } from "@/lib/utils";
 import { QUADRANT_KEY, quadrantOf, TYPE_KEY } from "./taskMeta";
@@ -29,6 +30,7 @@ export function TaskCard({ task, onOpen, wetHint, isFrog }: Props) {
   const drag = useDraggable({ id: task.id });
   const listeners = drag.listeners ?? {};
   const style = { transform: CSS.Translate.toString(drag.transform) };
+  const progress = progressOf(task); // DF10: "2 из 5" dots, null unless ticked
 
   const setRefs = (node: HTMLElement | null) => {
     // dnd-kit needs the node's layout rect to compute drop targets;
@@ -107,6 +109,29 @@ export function TaskCard({ task, onOpen, wetHint, isFrog }: Props) {
         <p data-testid={`task-card.wt-hint-${task.id}`} className="mt-1 text-xs text-warning">
           {t("kanban.wt-hint")}
         </p>
+      )}
+      {progress && (
+        <div
+          className="mt-1 flex items-center gap-1"
+          aria-label={t("kanban.progress-aria")
+            .replace("{done}", String(progress.done))
+            .replace("{total}", String(progress.total))}
+          data-testid={`task-card.progress-${task.id}`}
+        >
+          {Array.from({ length: progress.total }, (_, i) => (
+            <span
+              key={i}
+              aria-hidden="true"
+              className={cn(
+                "h-2 w-2 rounded-full border",
+                i < progress.done ? "border-primary bg-primary" : "border-muted-foreground/40",
+              )}
+            />
+          ))}
+          <span className="ml-0.5 text-[10px] tabular-nums text-muted-foreground">
+            {progress.done}/{progress.total}
+          </span>
+        </div>
       )}
       <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-6 text-xs text-muted-foreground">
         {task.no_timer && (

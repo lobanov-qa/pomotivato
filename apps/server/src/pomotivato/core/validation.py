@@ -19,10 +19,12 @@ from pomotivato.core.errors import (
     ValidationError,
 )
 from pomotivato.core.models import (
+    MAX_ON_DATES,
     MAX_SECTOR,
     Daily,
     DayPlan,
     Once,
+    OnDates,
     Recurrence,
     Review,
     SessionSettings,
@@ -77,6 +79,9 @@ def validate_task(task: Task) -> None:
     if task.estimate_blocks < 1:
         msg = "estimate_blocks must be >= 1"
         raise TaskValidationError(msg)
+    # V11 rides every task write (create/PATCH/clone): a recurrence that
+    # cannot expand must not reach storage to surprise the week view.
+    validate_recurrence(task.recurrence)
 
 
 def validate_recurrence(rec: Recurrence) -> None:
@@ -95,6 +100,13 @@ def validate_recurrence(rec: Recurrence) -> None:
             # Sanity floor for serialized data; E2 enforces calendar bounds.
             if start.year < 2000:
                 msg = f"unreasonable start date: {start}"
+                raise RecurrenceValidationError(msg)
+        case OnDates(days=ticked):
+            # DF8: ticked calendar days — at least one, never more than a
+            # sprint (V14 cap shared with sprints). An empty set is the
+            # UI's "uncheck all" and must arrive as Once, not here.
+            if not 1 <= len(ticked) <= MAX_ON_DATES:
+                msg = f"on_dates must hold 1..{MAX_ON_DATES} days, got {len(ticked)}"
                 raise RecurrenceValidationError(msg)
 
 

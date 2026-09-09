@@ -27,6 +27,8 @@ export interface TaskDto {
   cloned_from: string | null;
   /** DF13 (spec 06): board-only errand — no timer, no dial, no report. */
   no_timer: boolean;
+  /** DF10: completed work blocks so far (board list only) — the "2 of 5". */
+  blocks_done: number | null;
   created_at: string;
 }
 

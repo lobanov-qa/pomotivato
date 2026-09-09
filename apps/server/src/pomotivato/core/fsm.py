@@ -437,6 +437,24 @@ class SessionFSM:
         return tuple(self._reviews)
 
     @property
+    def awaiting_review(self) -> bool:
+        """DF10 fix (dogfood 08.09): finished work blocks without a verdict.
+
+        The score is the card's day-close trigger, so the review window
+        must outlive the timer: the last block of a day COMPLETES the
+        session, but the session is only truly over once every finished
+        block was scored (or the user dismissed and comes back later —
+        the same predicate keeps the day reported via /api/status).
+        """
+        reviewed = {rev.segment_id for rev in self._reviews}
+        return any(
+            seg.phase is SegmentPhase.WORK
+            and seg.status is SegmentStatus.COMPLETED
+            and seg.seg_id not in reviewed
+            for seg in self._segments
+        )
+
+    @property
     def average_score(self) -> float | None:
         if not self._reviews:
             return None
