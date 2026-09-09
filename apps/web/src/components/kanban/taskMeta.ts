@@ -33,5 +33,4 @@ export const QUADRANT_VALUE: Record<Quadrant, { important: boolean; urgent: bool
 export const TYPE_KEY: Record<TaskType, MessageKey> = {
   normal: "kanban.task-type-normal",
   study: "kanban.task-type-study",
-  habit: "kanban.task-type-habit",
 };

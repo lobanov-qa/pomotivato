@@ -85,12 +85,12 @@ export function FocusScreen() {
     const byId = new Map(tasks.map((task) => [task.id, task.when_then]));
     return (taskId: string | null | undefined) => (taskId ? byId.get(taskId) ?? null : null);
   }, [tasks]);
-  // Habit loop (spec 05 §3.8): a cue under the current legend row when set;
-  // a warning only for habits (normal tasks must not be nagged on /focus).
+  // Cue under the current legend row when when_then is set (spec 05 §3.8).
+  // DF7 (spec 06): the habit-empty nag left with the type — /focus shows
+  // what exists and warns about nothing; the kanban ring covers emptiness.
   const cueLine = (taskId: string | null | undefined): string | null => {
     const cue = cueOf(taskId);
-    if (cue) return `${t("dial.habit-cue")}: ${cue}`;
-    return typeOf(taskId) === "habit" ? t("dial.cue-empty") : null;
+    return cue ? `${t("dial.habit-cue")}: ${cue}` : null;
   };
 
   const currentTaskTitle = useMemo(() => {
@@ -132,7 +132,6 @@ export function FocusScreen() {
     score: number;
     comment?: string;
     recall_notes?: string;
-    reward?: string;
   }): Promise<void> {
     if (!pendingReview) return;
     await reviewError.mutateAsync({ segment_id: pendingReview.id, ...payload });

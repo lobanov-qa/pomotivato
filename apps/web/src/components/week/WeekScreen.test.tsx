@@ -16,7 +16,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WeekScreen } from "@/components/week/WeekScreen";
 import { mondayOf } from "@/features/week/dates";
 
-const BASE = mondayOf(new Date().toLocaleDateString("en-CA"));
+const TODAY_ISO = new Date().toLocaleDateString("en-CA");
+const BASE = mondayOf(TODAY_ISO);
 
 function dayAt(start: string, offset: number): string {
   return new Date(Date.parse(`${start}T00:00:00Z`) + offset * 86_400_000)
@@ -44,11 +45,13 @@ function weekItems(start: string) {
           kind: "future" as const,
           summary: null,
           planned:
-            i === 1 ? [{ task_id: "h-1", title: "Daily habit", type: "habit" as const }] : [],
+            i === 1 ? [{ task_id: "h-1", title: "Daily habit", type: "study" as const }] : [],
           // E4b: future days carry their real slots too (planning surface).
-          slots: i === 1 ? SLOTS.slice(0, 2) : [],
-          slots_count: i === 1 ? 2 : 0,
-          volume: i === 1 ? 3 : 0,
+          // The planning day is TODAY itself — a fixed BASE+1 rots after
+          // midnight and makes the editable (>= today) gate flaky (DF1).
+          slots: dayAt(start, i) === TODAY_ISO ? SLOTS.slice(0, 2) : [],
+          slots_count: dayAt(start, i) === TODAY_ISO ? 2 : 0,
+          volume: dayAt(start, i) === TODAY_ISO ? 3 : 0,
         }
   );
 }
@@ -76,6 +79,7 @@ const STRIP_TASK = {
   when_then: null,
   done_criteria: null,
   benefit: null,
+  cloned_from: null,
   created_at: "2026-09-06T09:00:00+00:00",
 };
 
@@ -194,8 +198,8 @@ describe("WeekScreen", () => {
     mockFetch();
 
     renderScreen();
-    await screen.findByTestId(`week.day-${dayAt(BASE, 1)}`);
-    await userEvent.click(screen.getByTestId(`week.day-${dayAt(BASE, 1)}`));
+    await screen.findByTestId(`week.day-${TODAY_ISO}`);
+    await userEvent.click(screen.getByTestId(`week.day-${TODAY_ISO}`));
 
     const detail = screen.getByTestId("week.detail");
     expect(detail).toHaveTextContent("Alpha");
@@ -244,8 +248,8 @@ describe("WeekScreen", () => {
     mockFetch();
 
     renderScreen();
-    await screen.findByTestId(`week.day-${dayAt(BASE, 1)}`);
-    await userEvent.click(screen.getByTestId(`week.day-${dayAt(BASE, 1)}`));
+    await screen.findByTestId(`week.day-${TODAY_ISO}`);
+    await userEvent.click(screen.getByTestId(`week.day-${TODAY_ISO}`));
 
     // sector 1 is first: "up" is disabled, "down" moves position 1 -> 2
     expect(screen.getByTestId("week.slot-move-up-1")).toBeDisabled();
@@ -262,12 +266,12 @@ describe("WeekScreen", () => {
     mockFetch();
 
     renderScreen();
-    await userEvent.click(await screen.findByTestId(`week.day-${dayAt(BASE, 1)}`));
+    await userEvent.click(await screen.findByTestId(`week.day-${TODAY_ISO}`));
 
     await userEvent.click(screen.getByTestId("week.slot-remove-1"));
 
     await waitFor(() =>
-      expect(posted.some((x) => x.url.endsWith("/day-plans/" + dayAt(BASE, 1) + "/slots/1"))).toBe(
+      expect(posted.some((x) => x.url.endsWith("/day-plans/" + TODAY_ISO + "/slots/1"))).toBe(
         true,
       )
     );

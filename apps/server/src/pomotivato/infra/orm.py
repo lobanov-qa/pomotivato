@@ -32,6 +32,9 @@ class TaskRow(Base):
     when_then: Mapped[str | None] = mapped_column(Text)
     done_criteria: Mapped[str | None] = mapped_column(Text)
     benefit: Mapped[str | None] = mapped_column(Text)
+    # DF12: lineage tag, intentionally NOT a FK — deleting the original must
+    # never be blocked (nor 500) by its clones' existence.
+    cloned_from: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[str] = mapped_column(Text)
 
 

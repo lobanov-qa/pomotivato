@@ -67,3 +67,25 @@ def test_foreign_keys_and_wal_enabled_on_runtime_connections(tmp_path):
 
     assert journal == "wal"
     assert foreign_keys == 1
+
+
+@pytest.mark.api
+def test_habit_sweep_and_lineage_column_land_on_upgrade(tmp_path):
+    """DF7/DF12 hop: legacy habit rows sweep to normal; cloned_from appears."""
+    path = tmp_path / "sweep-test.db"
+    upgrade_db(path, "7f2a9c41de55")
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "INSERT INTO tasks (id, title, type, important, urgent, status,"
+            " estimate_blocks, recurrence_json, created_at)"
+            " VALUES ('legacy', 'Old habit', 'habit', 0, 0, 'backlog', 1, '{}',"
+            " '2026-09-01T00:00:00+00:00')"
+        )
+
+    upgrade_db(path, HEAD)
+
+    with sqlite3.connect(path) as connection:
+        swept = connection.execute("SELECT type FROM tasks WHERE id='legacy'").fetchone()[0]
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(tasks)").fetchall()}
+    assert swept == "normal"
+    assert "cloned_from" in columns

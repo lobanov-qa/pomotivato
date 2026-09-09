@@ -283,3 +283,21 @@ def test_ui_settings_rejects_unknown_theme(http_app):
     response = http_app.put("/api/settings/ui", json={"max_in_work": 6, "theme": "hotdog"})
 
     assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.api
+def test_clone_endpoint_returns_backlog_copy_with_lineage(http_app):
+    """DF12 over HTTP: POST /api/tasks/{id}/clone -> 201 backlog twin."""
+    http_app.post("/api/tasks", json=_task_payload())
+    http_app.post("/api/tasks/task-100/status", json={"to": "planned"})
+    http_app.post("/api/tasks/task-100/status", json={"to": "doing"})
+    http_app.post("/api/tasks/task-100/status", json={"to": "done"})
+
+    clone = http_app.post("/api/tasks/task-100/clone", json={"id": "task-copy"})
+    fetched = http_app.get("/api/tasks/task-copy")
+
+    assert clone.status_code == HTTPStatus.CREATED
+    body = clone.json()
+    assert body["status"] == "backlog"
+    assert body["cloned_from"] == "task-100"
+    assert fetched.json()["title"] == "Write E2 tests"

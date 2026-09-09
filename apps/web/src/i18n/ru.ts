@@ -31,7 +31,6 @@ const RU = {
   "kanban.field-type": "Тип",
   "kanban.task-type-normal": "Обычная",
   "kanban.task-type-study": "Учёба",
-  "kanban.task-type-habit": "Привычка",
   "kanban.field-quadrant": "Квадрат",
   "kanban.quadrant-plain": "Не важно · не срочно",
   "kanban.quadrant-important": "Важно · не срочно",
@@ -46,6 +45,7 @@ const RU = {
   "kanban.field-parent": "Родительская задача",
   "kanban.parent-none": "— без родителя —",
   "kanban.delete": "Удалить",
+  "kanban.clone": "Дублировать",
   "kanban.delete-blocked-children": "Не удаляется: у задачи есть вложенные. Сначала удали их.",
   "kanban.delete-blocked-planned": "Не удаляется: задача стоит в плане на сегодня или позже. Сначала сними её с дня.",
   "kanban.delete-blocked-status": "Не удаляется прямо сейчас: верни карточку мышкой в «Бэклог» и удали оттуда.",
@@ -191,11 +191,8 @@ const RU = {
 
   "review.recall-label": "Вспомни 3 факта (active recall)",
   "review.recall-placeholder": "Что удержал в памяти без подглядывания?",
-  "review.reward-label": "Награда за привычку",
-  "review.reward-placeholder": "Чем отметишь сделанное?",
 
   "dial.habit-cue": "Якорь",
-  "dial.cue-empty": "план «если → то» не задан",
 
   "week.due-title": "На повторение сегодня",
   "week.due-empty": "Очередь повторений пуста",

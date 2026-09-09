@@ -121,6 +121,31 @@ class TaskService:
         await self._session.flush()
         return updated
 
+    async def clone(self, task_id: str, clone_id: str) -> Task:
+        """Duplicate a finished card back into the backlog (spec 06 DF12).
+
+        The point (author 08.09) is not re-creating a big repeated task
+        from scratch: title, type, quadrant, chunk, when_then/criteria/
+        benefit and recurrence cadence all carry over. What resets:
+        status -> backlog, deadline -> None (a past date must not haunt
+        the copy), and `cloned_from` records the lineage for history.
+        """
+        task = await self.get(task_id)
+        if await self._tasks.get(clone_id) is not None:
+            msg = f"task {clone_id!r} already exists"
+            raise ConflictError(msg)
+        clone = replace(
+            task,
+            id=clone_id,
+            status=TaskStatus.BACKLOG,
+            deadline=None,
+            cloned_from=task.id,
+        )
+        validate_task(clone)
+        await self._tasks.add(clone)
+        await self._session.flush()
+        return clone
+
     async def delete(self, task_id: str) -> None:
         task = await self.get(task_id)
         # Q3 of spec 02: only cards that never entered work are forgettable.

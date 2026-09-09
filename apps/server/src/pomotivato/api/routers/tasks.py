@@ -7,7 +7,13 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Response
 
 from pomotivato.api.deps import ClockDep, DbSession
-from pomotivato.api.schemas import SetStatusDto, TaskCreateDto, TaskDto, TaskPatchDto
+from pomotivato.api.schemas import (
+    SetStatusDto,
+    TaskCloneDto,
+    TaskCreateDto,
+    TaskDto,
+    TaskPatchDto,
+)
 from pomotivato.core.models import TaskStatus, TaskType
 from pomotivato.services.task_service import TaskService
 
@@ -53,6 +59,12 @@ async def patch_task(task_id: str, dto: TaskPatchDto, session: DbSession) -> Tas
 async def set_task_status(task_id: str, dto: SetStatusDto, session: DbSession) -> TaskDto:
     service = TaskService(session)
     return TaskDto.from_core(await service.set_status(task_id, dto.to))
+
+
+@router.post("/{task_id}/clone", response_model=TaskDto, status_code=201)
+async def clone_task(task_id: str, dto: TaskCloneDto, session: DbSession) -> TaskDto:
+    service = TaskService(session)
+    return TaskDto.from_core(await service.clone(task_id, dto.id))
 
 
 @router.delete("/{task_id}", status_code=204)

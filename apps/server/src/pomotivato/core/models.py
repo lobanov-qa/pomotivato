@@ -29,7 +29,9 @@ class TaskStatus(StrEnum):
 class TaskType(StrEnum):
     NORMAL = "normal"
     STUDY = "study"
-    HABIT = "habit"
+    # HABIT retired (spec 06 DF7, author 08.09): the type carried no
+    # behaviour beyond a badge; the reward ritual was dead weight. Legacy
+    # rows are swept to NORMAL by migration 8e5c31d7b9f4.
 
 
 class SegmentPhase(StrEnum):
@@ -112,6 +114,9 @@ class Task:
     when_then: str | None = None
     done_criteria: str | None = None
     benefit: str | None = None
+    # DF12 (spec 06): lineage of manual duplicates — the card a clone was
+    # born from, so total work across the clone chain stays traceable.
+    cloned_from: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -345,6 +350,7 @@ def task_from_dict(data: Mapping[str, Any]) -> Task:
         when_then=data.get("when_then"),
         done_criteria=data.get("done_criteria"),
         benefit=data.get("benefit"),
+        cloned_from=data.get("cloned_from"),
     )
 
 

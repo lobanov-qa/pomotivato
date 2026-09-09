@@ -7,7 +7,7 @@
  */
 
 export type TaskStatus = "backlog" | "planned" | "doing" | "done" | "archived";
-export type TaskType = "normal" | "study" | "habit";
+export type TaskType = "normal" | "study";
 
 export interface TaskDto {
   id: string;
@@ -23,6 +23,8 @@ export interface TaskDto {
   when_then: string | null;
   done_criteria: string | null;
   benefit: string | null;
+  /** DF12 lineage: the card this clone was duplicated from (spec 06). */
+  cloned_from: string | null;
   created_at: string;
 }
 
@@ -207,6 +209,10 @@ export const api = {
     request<TaskDto>("POST", `/api/tasks/${id}/status`, { to }),
   deleteTask: (id: string) => request<void>("DELETE", `/api/tasks/${id}`),
 
+  /** DF12: duplicate a done card into backlog, lineage kept (spec 06). */
+  cloneTask: (id: string, cloneId: string) =>
+    request<TaskDto>("POST", `/api/tasks/${id}/clone`, { id: cloneId }),
+
   getDayPlan: (date: string) => request<DayPlanDto>("GET", `/api/day-plans/${date}`),
   putDayPlan: (plan: DayPlanDto) =>
     request<DayPlanDto>("PUT", `/api/day-plans/${plan.date}`, plan),
@@ -247,9 +253,8 @@ export const api = {
     segment_id: string;
     score: number;
     comment?: string;
-    // E4b (spec 05 §3.7-3.8): study recall notes / habit reward.
+    // E4b (spec 05 §3.7): study active-recall notes (reward retired by DF7).
     recall_notes?: string;
-    reward?: string;
   }) =>
     request<{ segment_id: string; score: number }>("POST", "/api/reviews", body),
 
