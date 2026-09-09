@@ -1,6 +1,6 @@
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { ChevronDown, GripVertical, Trash2 } from "lucide-react";
+import { ChevronDown, Copy, GripVertical, Trash2 } from "lucide-react";
 import { useState } from "react";
 import type { TaskDto, TaskStatus, TaskType } from "@/api/client";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,8 @@ interface Props {
   editing: boolean;
   onChange: (id: string, changes: Partial<TaskDto>) => void;
   onDelete: (id: string) => void;
+  /** DF12 (spec 06): duplicate a finished card back into the backlog. */
+  onClone: (id: string) => void;
   /** Other tasks for the parent selector (only top-level, non-self). */
   parents: TaskDto[];
   /** V8-soft ring: scheduled card with a blank when_then (spec 05 §3.1). */
@@ -38,7 +40,7 @@ interface Props {
   isFrog: boolean;
 }
 
-export function TaskCard({ task, editing, onChange, onDelete, parents, wetHint, isFrog }: Props) {
+export function TaskCard({ task, editing, onChange, onDelete, onClone, parents, wetHint, isFrog }: Props) {
   const [scienceOpen, setScienceOpen] = useState(false);
   const drag = useDraggable({ id: task.id, disabled: editing });
   const listeners = drag.listeners ?? {};
@@ -240,6 +242,19 @@ export function TaskCard({ task, editing, onChange, onDelete, parents, wetHint, 
             >
               <Trash2 className="h-3.5 w-3.5" />
               {t("kanban.delete")}
+            </Button>
+          )}
+
+          {task.status === "done" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              data-testid={`task-card.clone-${task.id}`}
+              onClick={() => onClone(task.id)}
+              className="self-start"
+            >
+              <Copy className="h-3.5 w-3.5" />
+              {t("kanban.clone")}
             </Button>
           )}
         </div>

@@ -358,3 +358,73 @@ def test_delete_detaches_worked_segments_when_history_references_card(database, 
     detached_task_id = asyncio.run(scenario())
 
     assert detached_task_id is None  # history kept, link gone
+
+
+@pytest.mark.api
+def test_clone_copies_planning_fields_into_backlog_when_done_card_repeats(database, call):
+    """DF12: a finished card clones to backlog with lineage, reset progress."""
+    source = task_factory(
+        type=TaskType.STUDY,
+        important=True,
+        urgent=True,
+        estimate_blocks=2,
+        when_then="if 9:00 -> english",
+        done_criteria="3 facts",
+        benefit="level up",
+        recurrence=Daily(),
+        deadline=DEFAULT_DAY + timedelta(days=5),
+    )
+
+    async def scenario() -> Any:
+        async with call() as svc:
+            await svc.task.create(source)
+            await svc.task.set_status(source.id, TaskStatus.PLANNED)
+            await svc.task.set_status(source.id, TaskStatus.DOING)
+            await svc.task.set_status(source.id, TaskStatus.DONE)
+        async with call() as svc:
+            return await svc.task.clone(source.id, "task-copy")
+
+    clone = asyncio.run(scenario())
+
+    assert clone.status is TaskStatus.BACKLOG
+    assert clone.cloned_from == source.id
+    assert clone.title == source.title
+    assert clone.type is TaskType.STUDY
+    assert clone.important and clone.urgent
+    assert clone.estimate_blocks == 2
+    assert clone.when_then == "if 9:00 -> english"
+    assert clone.deadline is None  # repeats re-planned, not re-dated
+    assert str(clone.recurrence) == str(Daily())  # cadence is a card setting
+
+
+@pytest.mark.api
+def test_clone_conflicts_when_target_id_taken(database, call):
+    async def scenario() -> Any:
+        async with call() as svc:
+            await svc.task.create(task_factory(id="taken"))
+        async with call() as svc:
+            return await svc.task.clone("taken", "taken")
+
+    with pytest.raises(ConflictError):
+        asyncio.run(scenario())
+
+
+@pytest.mark.api
+def test_clone_is_visible_in_list_and_deletable_like_any_backlog_card(database, call):
+    """DF12 hygiene: a clone has no special delete powers or blocks."""
+
+    async def scenario() -> Any:
+        async with call() as svc:
+            original = await svc.task.create(task_factory())
+        async with call() as svc:
+            clone = await svc.task.clone(original.id, "task-lonely")
+        async with call() as svc:
+            await svc.task.delete(clone.id)  # never touched a plan -> clean
+        async with call() as svc:
+            await svc.task.delete(original.id)  # the clone is gone already
+        async with call() as svc:
+            return await svc.task.list()
+
+    remaining = asyncio.run(scenario())
+
+    assert remaining == ()

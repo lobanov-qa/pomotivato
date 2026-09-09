@@ -60,6 +60,7 @@ def _task_to_row(task: Task) -> TaskRow:
         when_then=task.when_then,
         done_criteria=task.done_criteria,
         benefit=task.benefit,
+        cloned_from=task.cloned_from,
         created_at=task.created_at.isoformat(),
     )
 
@@ -79,6 +80,7 @@ def _task_from_row(row: TaskRow) -> Task:
         "when_then": row.when_then,
         "done_criteria": row.done_criteria,
         "benefit": row.benefit,
+        "cloned_from": row.cloned_from,
         "created_at": row.created_at,
     }
     return task_from_dict(data)

@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { BOARD_COLUMNS, columnOf, deleteErrorKey, dropTarget, type BoardColumn } from "@/features/kanban/board";
 import {
+  useCloneTask,
   useCreateTask,
   useDeleteTask,
   useFrogId,
@@ -43,6 +44,7 @@ export function KanbanScreen() {
   const patch = usePatchTask();
   const create = useCreateTask();
   const remove = useDeleteTask();
+  const clone = useCloneTask();
 
   const [editingColumn, setEditingColumn] = useState<BoardColumn | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -191,6 +193,11 @@ export function KanbanScreen() {
                     isFrog={isFrogCard(task.id, frog?.task_id)}
                     onChange={onFieldChange}
                     onDelete={(id) => void onDelete(id)}
+                    onClone={(id) =>
+                      void clone
+                        .mutateAsync({ id, cloneId: `task-${crypto.randomUUID().slice(0, 12)}` })
+                        .catch(() => undefined)
+                    }
                   />
                 ))}
               </KanbanColumn>

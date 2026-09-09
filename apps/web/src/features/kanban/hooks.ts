@@ -87,3 +87,12 @@ export function useDeleteTask() {
     onSettled: () => invalidateBoard(client),
   });
 }
+
+/** DF12 (spec 06): duplicate a done card into the backlog. */
+export function useCloneTask() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, cloneId }: { id: string; cloneId: string }) => api.cloneTask(id, cloneId),
+    onSettled: () => invalidateBoard(client),
+  });
+}

@@ -51,6 +51,7 @@ class TaskCreateDto(BaseModel):
     when_then: str | None = None
     done_criteria: str | None = None
     benefit: str | None = None
+    cloned_from: str | None = None
 
     def to_core(self, created_at: datetime) -> Task:
         return Task(
@@ -68,6 +69,7 @@ class TaskCreateDto(BaseModel):
             when_then=self.when_then,
             done_criteria=self.done_criteria,
             benefit=self.benefit,
+            cloned_from=self.cloned_from,
         )
 
 
@@ -105,6 +107,7 @@ class TaskDto(BaseModel):
     when_then: str | None
     done_criteria: str | None
     benefit: str | None
+    cloned_from: str | None
     created_at: str
 
     @classmethod
@@ -155,6 +158,12 @@ class MoveSlotDto(BaseModel):
 
 class SetStatusDto(BaseModel):
     to: TaskStatus
+
+
+class TaskCloneDto(BaseModel):
+    """DF12: the id the client generates for the new copy (POST idiom)."""
+
+    id: str
 
 
 class SessionCreateDto(BaseModel):

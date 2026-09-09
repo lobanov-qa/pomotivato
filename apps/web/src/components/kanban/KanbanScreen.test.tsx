@@ -26,6 +26,7 @@ function task(overrides: Partial<TaskDto> = {}): TaskDto {
     when_then: null,
     done_criteria: null,
     benefit: null,
+    cloned_from: null,
     created_at: "2026-09-05T09:00:00+00:00",
     ...overrides,
   };
@@ -137,6 +138,30 @@ describe("KanbanScreen", () => {
     await user.click(await screen.findByTestId("task-card.delete-a"));
 
     expect(await screen.findByTestId("kanban.conflict-toast")).toHaveTextContent("стоит в плане");
+  });
+
+  it("duplicates a done card via POST clone (DF12)", async () => {
+    const user = userEvent.setup();
+    const posts: string[] = [];
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), "http://x");
+      if (url.pathname === "/api/tasks/d/clone" && init?.method === "POST") {
+        posts.push(url.pathname);
+        return jsonResponse(201, task({ id: "clone-x", status: "backlog", cloned_from: "d" }));
+      }
+      if (url.pathname === "/api/tasks") return jsonResponse(200, BOARD);
+      if (url.pathname.startsWith("/api/day-plans/")) {
+        return jsonResponse(200, { id: "p", date: "2026-09-05", slots: [] });
+      }
+      if (url.pathname === "/api/frog") return jsonResponse(200, { task_id: frogId });
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    renderScreen();
+
+    await user.click(await screen.findByTestId("kanban.edit-toggle-done"));
+    await user.click(await screen.findByTestId("task-card.clone-d"));
+
+    expect(posts).toEqual(["/api/tasks/d/clone"]);
   });
 
   it("creates a task from the quick-add form via POST", async () => {
