@@ -8,11 +8,12 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, type TaskDto, type TaskStatus } from "@/api/client";
 import { KanbanColumn } from "@/components/kanban/KanbanColumn";
 import { TaskCard } from "@/components/kanban/TaskCard";
+import { TaskPanel } from "@/components/kanban/TaskPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { BOARD_COLUMNS, columnOf, deleteErrorKey, dropTarget, type BoardColumn } from "@/features/kanban/board";
@@ -28,6 +29,7 @@ import {
 } from "@/features/kanban/hooks";
 import { deriveSlots, planIdForDate } from "@/features/kanban/planner";
 import { isFrogCard, needsWhenThen } from "@/features/kanban/science";
+import { useUiSettings } from "@/features/settings/hooks";
 import { t } from "@/i18n/ru";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +41,10 @@ function today(): string {
 export function KanbanScreen() {
   const { tasks, byId, error: loadError, isLoading } = useTasks();
   const { data: frog } = useFrogId();
+  const { data: settings } = useUiSettings();
+  // DF6 (spec 06): the amber nag rings honour the switch; until settings
+  // load (or if the server is down) the current behavior (on) holds.
+  const wetEnabled = settings?.ui.wet_hints ?? true;
   const client = useQueryClient();
   const move = useMoveTask();
   const patch = usePatchTask();
@@ -46,8 +52,8 @@ export function KanbanScreen() {
   const remove = useDeleteTask();
   const clone = useCloneTask();
 
-  const [editingColumn, setEditingColumn] = useState<BoardColumn | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [panelId, setPanelId] = useState<string | null>(null); // DF2 card panel
   const [conflictToast, setConflictToast] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
 
@@ -55,6 +61,10 @@ export function KanbanScreen() {
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
   );
   const dragged = draggedId ? byId.get(draggedId) : undefined;
+  const panelTask = panelId ? byId.get(panelId) ?? null : null;
+  // Stable identity: TaskPanel's focus/Esc effect must not re-run while
+  // optimistic patches re-render the screen (it would steal input focus).
+  const closePanel = useCallback(() => setPanelId(null), []);
 
   const planTasks = useMemo(() => {
     const doing = tasks.filter((task) => task.status === "doing");
@@ -178,26 +188,14 @@ export function KanbanScreen() {
                 canReceive={Boolean(
                   dragged && dropTarget(dragged.status, column as TaskStatus) !== null,
                 )}
-                editing={editingColumn === column}
-                onEditToggle={() =>
-                  setEditingColumn((current) => (current === column ? null : column))
-                }
               >
                 {cards.map((task) => (
                   <TaskCard
                     key={task.id}
                     task={task}
-                    editing={editingColumn === column}
-                    parents={tasks}
-                    wetHint={needsWhenThen(task)}
+                    wetHint={wetEnabled && needsWhenThen(task)}
                     isFrog={isFrogCard(task.id, frog?.task_id)}
-                    onChange={onFieldChange}
-                    onDelete={(id) => void onDelete(id)}
-                    onClone={(id) =>
-                      void clone
-                        .mutateAsync({ id, cloneId: `task-${crypto.randomUUID().slice(0, 12)}` })
-                        .catch(() => undefined)
-                    }
+                    onOpen={setPanelId}
                   />
                 ))}
               </KanbanColumn>
@@ -241,6 +239,21 @@ export function KanbanScreen() {
         >
           {conflictToast}
         </div>
+      )}
+
+      {panelTask && (
+        <TaskPanel
+          task={panelTask}
+          parents={tasks}
+          onChange={onFieldChange}
+          onDelete={(id) => void onDelete(id)}
+          onClone={(id) =>
+            void clone
+              .mutateAsync({ id, cloneId: `task-${crypto.randomUUID().slice(0, 12)}` })
+              .catch(() => undefined)
+          }
+          onClose={closePanel}
+        />
       )}
     </div>
   );
