@@ -25,6 +25,14 @@ def test_frog_none_when_empty_or_all_done():
 
 
 @pytest.mark.unit
+def test_frog_skips_no_timer_errands():  # DF13: an errand is not a frog
+    errand = task_factory(estimate_blocks=9, no_timer=True)
+    timer_task = task_factory(estimate_blocks=3)
+    assert frog_candidate((errand, timer_task)) is timer_task
+    assert frog_candidate((errand,)) is None
+
+
+@pytest.mark.unit
 def test_frog_picks_biggest_estimate():
     small = task_factory(estimate_blocks=FROG_MIN_BLOCKS)
     big = task_factory(estimate_blocks=7)

@@ -35,6 +35,9 @@ class TaskRow(Base):
     # DF12: lineage tag, intentionally NOT a FK — deleting the original must
     # never be blocked (nor 500) by its clones' existence.
     cloned_from: Mapped[str | None] = mapped_column(Text)
+    # DF13: board-only errand — never enters the dial, the capacity funnel
+    # or the recurring-activation surface.
+    no_timer: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     created_at: Mapped[str] = mapped_column(Text)
 
 

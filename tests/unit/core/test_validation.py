@@ -245,6 +245,11 @@ def test_planning_ready_is_soft_when_science_not_required():
 
 
 @pytest.mark.unit
+def test_planning_ready_exempts_no_timer_errands():  # DF13: no report to feed
+    validate_planning_ready(task_factory(no_timer=True), require_science_fields=True)
+
+
+@pytest.mark.unit
 def test_planning_ready_raises_when_science_required_and_no_when_then():
     with pytest.raises(ScienceFieldRequiredError, match="needs when_then"):
         validate_planning_ready(task_factory(when_then=None), require_science_fields=True)

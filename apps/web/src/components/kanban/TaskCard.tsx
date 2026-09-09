@@ -109,6 +109,11 @@ export function TaskCard({ task, onOpen, wetHint, isFrog }: Props) {
         </p>
       )}
       <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-6 text-xs text-muted-foreground">
+        {task.no_timer && (
+          <span data-testid={`task-card.no-timer-${task.id}`} className="rounded bg-muted px-1">
+            {t("kanban.no-timer-badge")}
+          </span>
+        )}
         <span data-testid={`task-card.type-${task.id}`}>{t(TYPE_KEY[task.type])}</span>
         <span aria-hidden>·</span>
         <span data-testid={`task-card.quadrant-${task.id}`}>

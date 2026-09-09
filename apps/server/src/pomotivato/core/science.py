@@ -76,6 +76,7 @@ def frog_candidate(tasks: tuple[Task, ...]) -> Task | None:
         task
         for task in tasks
         if task.status not in (TaskStatus.DONE, TaskStatus.ARCHIVED)
+        and not task.no_timer  # DF13: errands are not frogs (no timer to eat)
         and task.estimate_blocks >= FROG_MIN_BLOCKS
     ]
     if not open_tasks:

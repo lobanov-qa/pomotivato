@@ -17,6 +17,10 @@ describe("needsWhenThen", () => {
   it("stays silent once the plan exists", () => {
     expect(needsWhenThen({ status: "planned", when_then: "если 9:00 → пишу" })).toBe(false);
   });
+  it("never rings a no-timer errand (DF13)", () => {
+    expect(needsWhenThen({ status: "doing", when_then: null, no_timer: true })).toBe(false);
+    expect(needsWhenThen({ status: "planned", when_then: "  ", no_timer: true })).toBe(false);
+  });
 });
 
 describe("isFrogCard", () => {

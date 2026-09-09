@@ -34,7 +34,9 @@ def week_projection(
     recurring = tuple(
         task
         for task in tasks
-        if not isinstance(task.recurrence, Once) and task.status in ACTIVE_STATUSES
+        if not isinstance(task.recurrence, Once)
+        and task.status in ACTIVE_STATUSES
+        and not task.no_timer  # DF13: errands don't appear as day work
     )
     items = []
     for offset in range(days):

@@ -150,6 +150,16 @@ def test_activate_skips_once_habit_and_done():  # GWT-A5 + status guard
 
 
 @pytest.mark.unit
+def test_activate_skips_no_timer_errand_even_when_recurring():
+    """DF13: an errand is never day work, not even a recurring one."""
+    errand = recurring(no_timer=True)
+
+    outcome = activate_recurring(empty_plan(), (errand,), TUESDAY)
+
+    assert outcome.plan.slots == ()
+
+
+@pytest.mark.unit
 def test_activate_order_is_deterministic_by_task_id():
     later = recurring(id="task-z", recurrence=Daily())
     earlier = recurring(id="task-a", recurrence=Daily())

@@ -44,6 +44,13 @@ class DayPlanService:
         if existing is not None:
             plan = replace(plan, id=existing.id)
         tasks = await self._tasks_for(plan.slots)
+        for task in tasks.values():
+            # DF13: the dial is timer work; a no-timer errand must never
+            # occupy a sector (the add() gate covers drags, this one the
+            # PUT surface — both read from the same truth).
+            if task.no_timer:
+                msg = f"task {task.id!r} is a no-timer errand — the dial is for timer work"
+                raise ValidationError(msg)
         validate_day_plan(plan, tasks)
         await self._plans.save(plan)
         await self._session.flush()
@@ -71,6 +78,10 @@ class DayPlanService:
         if task is None:
             msg = f"task {task_id!r} not found"
             raise NotFoundError(msg)
+        if task.no_timer:
+            # DF13 (spec 06): a board-only errand has no timer to schedule.
+            msg = f"task {task_id!r} is a no-timer errand — the dial is for timer work"
+            raise ValidationError(msg)
         plan = await self._ensure_plan(day)
         outcome = add_task_to_plan(plan, task)
         await self._persist(outcome.plan)

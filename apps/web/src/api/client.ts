@@ -25,6 +25,8 @@ export interface TaskDto {
   benefit: string | null;
   /** DF12 lineage: the card this clone was duplicated from (spec 06). */
   cloned_from: string | null;
+  /** DF13 (spec 06): board-only errand — no timer, no dial, no report. */
+  no_timer: boolean;
   created_at: string;
 }
 

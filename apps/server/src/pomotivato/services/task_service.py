@@ -36,6 +36,7 @@ _PATCHABLE_FIELDS = frozenset(
         "when_then",
         "done_criteria",
         "benefit",
+        "no_timer",
     }
 )
 
@@ -111,9 +112,11 @@ class TaskService:
         if new_status is TaskStatus.DOING and task.status is not TaskStatus.DOING:
             # Funnel law: "В работе" == today == the dial; the capacity is
             # a server-side gate so no client (or second window) overflows.
+            # DF13: no-timer errands don't consume the dial — free to carry.
             limit = (await self._settings.get_ui_settings()).max_in_work
             in_work = await self._tasks.list(status=TaskStatus.DOING)
-            if len(in_work) >= limit:
+            timer_load = sum(1 for t in in_work if not t.no_timer)
+            if not task.no_timer and timer_load >= limit:
                 msg = f"only {limit} tasks fit in work today"
                 raise ConflictError(msg)
         updated = replace(task, status=new_status)
