@@ -61,6 +61,7 @@ def _task_to_row(task: Task) -> TaskRow:
         done_criteria=task.done_criteria,
         benefit=task.benefit,
         cloned_from=task.cloned_from,
+        no_timer=task.no_timer,
         created_at=task.created_at.isoformat(),
     )
 
@@ -81,6 +82,7 @@ def _task_from_row(row: TaskRow) -> Task:
         "done_criteria": row.done_criteria,
         "benefit": row.benefit,
         "cloned_from": row.cloned_from,
+        "no_timer": bool(row.no_timer),
         "created_at": row.created_at,
     }
     return task_from_dict(data)

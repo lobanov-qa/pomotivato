@@ -14,10 +14,13 @@ import type { SlotDto, TaskDto } from "@/api/client";
 
 export const MAX_PLAN_SLOTS = 12; // core MAX_SECTOR
 
-/** Sector slots for today from the doing column, capped at the dial. */
+/** Sector slots for today from the doing column, capped at the dial.
+ * DF13 (spec 06): no-timer errands sit in the column for tracking only —
+ * the dial and its sectors are timer work, so they never occupy one. */
 export function deriveSlots(doing: TaskDto[], maxSlots: number = MAX_PLAN_SLOTS): SlotDto[] {
   const slots: SlotDto[] = [];
   for (const task of doing) {
+    if (task.no_timer) continue;
     for (let i = 0; i < Math.max(1, task.estimate_blocks); i++) {
       if (slots.length >= Math.min(maxSlots, MAX_PLAN_SLOTS)) return slots;
       slots.push({ sector: slots.length + 1, task_id: task.id });

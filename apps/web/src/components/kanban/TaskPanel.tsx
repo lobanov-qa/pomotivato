@@ -148,6 +148,19 @@ export function TaskPanel({ task, parents, onChange, onDelete, onClone, onClose 
           </label>
         </div>
 
+        {/* DF13 (spec 06): board-only errand — off the dial, off the
+            capacity funnel; V8 science fields stop applying to it. */}
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            data-testid={`task-panel.no-timer-${task.id}`}
+            checked={task.no_timer}
+            onChange={(e) => set({ no_timer: e.target.checked })}
+            className="h-4 w-4 rounded border-input"
+          />
+          {t("kanban.field-no-timer")}
+        </label>
+
         <button
           type="button"
           data-testid={`task-panel.science-toggle-${task.id}`}

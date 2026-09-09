@@ -342,3 +342,17 @@ def test_clone_endpoint_returns_backlog_copy_with_lineage(http_app):
     assert body["status"] == "backlog"
     assert body["cloned_from"] == "task-100"
     assert fetched.json()["title"] == "Write E2 tests"
+
+
+@pytest.mark.api
+def test_no_timer_roundtrips_via_create_and_patch(http_app):
+    """DF13 over HTTP: create carries the flag, PATCH flips it both ways."""
+    created = http_app.post("/api/tasks", json={**_task_payload(), "no_timer": True})
+    assert created.status_code == HTTPStatus.CREATED
+    assert created.json()["no_timer"] is True
+
+    patched = http_app.patch("/api/tasks/task-100", json={"no_timer": False})
+    fetched = http_app.get("/api/tasks/task-100")
+
+    assert patched.json()["no_timer"] is False
+    assert fetched.json()["no_timer"] is False

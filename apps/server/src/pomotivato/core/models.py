@@ -117,6 +117,9 @@ class Task:
     # DF12 (spec 06): lineage of manual duplicates — the card a clone was
     # born from, so total work across the clone chain stays traceable.
     cloned_from: str | None = None
+    # DF13 (spec 06): board-only errand (call, pick up) — no timer, no
+    # report, no dial: lives on the kanban and never fills the funnel.
+    no_timer: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -351,6 +354,7 @@ def task_from_dict(data: Mapping[str, Any]) -> Task:
         done_criteria=data.get("done_criteria"),
         benefit=data.get("benefit"),
         cloned_from=data.get("cloned_from"),
+        no_timer=bool(data.get("no_timer", False)),
     )
 
 

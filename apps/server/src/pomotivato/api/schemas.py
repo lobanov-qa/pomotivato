@@ -52,6 +52,7 @@ class TaskCreateDto(BaseModel):
     done_criteria: str | None = None
     benefit: str | None = None
     cloned_from: str | None = None
+    no_timer: bool = False
 
     def to_core(self, created_at: datetime) -> Task:
         return Task(
@@ -70,6 +71,7 @@ class TaskCreateDto(BaseModel):
             done_criteria=self.done_criteria,
             benefit=self.benefit,
             cloned_from=self.cloned_from,
+            no_timer=self.no_timer,
         )
 
 
@@ -86,6 +88,7 @@ class TaskPatchDto(BaseModel):
     when_then: str | None = None
     done_criteria: str | None = None
     benefit: str | None = None
+    no_timer: bool | None = None
 
     def changes(self) -> dict[str, Any]:
         # exclude_unset: an explicit null clears a field, an absent key
@@ -108,6 +111,7 @@ class TaskDto(BaseModel):
     done_criteria: str | None
     benefit: str | None
     cloned_from: str | None
+    no_timer: bool
     created_at: str
 
     @classmethod

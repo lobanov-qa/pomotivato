@@ -46,6 +46,8 @@ const RU = {
   "kanban.parent-none": "— без родителя —",
   "kanban.delete": "Удалить",
   "kanban.clone": "Дублировать",
+  "kanban.field-no-timer": "Без таймера (только для доски)",
+  "kanban.no-timer-badge": "без таймера",
   "kanban.card-edit": "Редактировать задачу",
   "kanban.panel-title": "Задача",
   "kanban.panel-close": "Закрыть",

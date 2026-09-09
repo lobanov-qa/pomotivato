@@ -37,6 +37,13 @@ describe("deriveSlots", () => {
     expect(slots).toHaveLength(MAX_PLAN_SLOTS);
     expect(slots.at(-1)).toEqual({ sector: MAX_PLAN_SLOTS, task_id: "t3" });
   });
+
+  it("skips no-timer errands — the dial is timer work (DF13)", () => {
+    const errand = { ...doing("e", 2), no_timer: true };
+    const slots = deriveSlots([errand, doing("a", 1)]);
+
+    expect(slots).toEqual([{ sector: 1, task_id: "a" }]);
+  });
 });
 
 describe("planIdForDate", () => {

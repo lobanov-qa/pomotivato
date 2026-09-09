@@ -428,3 +428,26 @@ def test_clone_is_visible_in_list_and_deletable_like_any_backlog_card(database, 
     remaining = asyncio.run(scenario())
 
     assert remaining == ()
+
+
+@pytest.mark.api
+def test_doing_capacity_counts_only_timer_tasks_when_no_timer_cards_enter(database, call):
+    """DF13: board-only errands never fill the funnel — the dial stays theirs."""
+
+    async def scenario() -> Any:
+        async with call() as svc:
+            await svc.settings.put_ui_settings(2, "auto", False)
+            timer_a = await svc.task.create(task_factory())
+            timer_b = await svc.task.create(task_factory())
+            errand = await svc.task.create(task_factory(no_timer=True))
+            for task in (timer_a, timer_b):
+                await svc.task.set_status(task.id, TaskStatus.PLANNED)
+                await svc.task.set_status(task.id, TaskStatus.DOING)
+            await svc.task.create(task_factory(id="errand-2", no_timer=True))
+        async with call() as svc:
+            moved = await svc.task.set_status(errand.id, TaskStatus.PLANNED)
+            return await svc.task.set_status(moved.id, TaskStatus.DOING)
+
+    doing = asyncio.run(scenario())
+
+    assert doing.status is TaskStatus.DOING  # 2 timers in work, cap 2 — errand passes

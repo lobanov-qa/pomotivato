@@ -89,3 +89,24 @@ def test_habit_sweep_and_lineage_column_land_on_upgrade(tmp_path):
         columns = {row[1] for row in connection.execute("PRAGMA table_info(tasks)").fetchall()}
     assert swept == "normal"
     assert "cloned_from" in columns
+
+
+@pytest.mark.api
+def test_no_timer_column_defaults_false_for_existing_rows(tmp_path):
+    """DF13 hop: old databases load every pre-existing card as timer work."""
+    path = tmp_path / "no-timer-test.db"
+    upgrade_db(path, "8e5c31d7b9f4")
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "INSERT INTO tasks (id, title, type, important, urgent, status,"
+            " estimate_blocks, recurrence_json, created_at)"
+            " VALUES ('old', 'Was a timer task', 'normal', 0, 0, 'backlog', 1, '{}',"
+            " '2026-09-01T00:00:00+00:00')"
+        )
+
+    upgrade_db(path, HEAD)
+
+    with sqlite3.connect(path) as connection:
+        flag = connection.execute("SELECT no_timer FROM tasks WHERE id='old'").fetchone()[0]
+
+    assert flag == 0

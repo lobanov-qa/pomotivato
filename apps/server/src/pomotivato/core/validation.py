@@ -206,7 +206,13 @@ def validate_sprint_transition(old: SprintStatus, new: SprintStatus) -> None:
 
 
 def validate_planning_ready(task: Task, require_science_fields: bool) -> None:
-    """V8: when_then gate for BACKLOG -> PLANNED, soft by default (§2.2#12)."""
+    """V8: when_then gate for BACKLOG -> PLANNED, soft by default (§2.2#12).
+
+    DF13 (spec 06): board-only errands are exempt — the gate exists to
+    feed the science report, and a no-timer task produces no report.
+    """
+    if task.no_timer:
+        return
     if require_science_fields and not (task.when_then or "").strip():
         msg = f"task {task.id!r} needs when_then to enter planning"
         raise ScienceFieldRequiredError(msg)

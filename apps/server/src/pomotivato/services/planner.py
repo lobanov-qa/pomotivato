@@ -62,17 +62,19 @@ def activate_recurring(plan: DayPlan, tasks: tuple[Task, ...], day: date) -> Add
     """Append every recurring task materialized on `day` (spec 05 §3.2).
 
     Candidates keep the week-view semantics (single source, DRY):
-    non-Once recurrence among non-DONE/non-ARCHIVED tasks, decided by the
-    same pure `expand_recurrence(task.recurrence, day, day)` the browser
+    non-Once recurrence among non-DONE/non-ARCHIVED timer tasks, decided by
+    the same pure `expand_recurrence(task.recurrence, day, day)` the browser
     reads from — the UI preview and the write path can never disagree.
-    Order is task id, so the result is deterministic regardless of the
-    repository scan order.
+    DF13: no-timer errands never materialize onto a day. Order is task id,
+    so the result is deterministic regardless of the repository scan order.
     """
     candidates = sorted(
         (
             task
             for task in tasks
-            if task.status in ACTIVE_STATUSES and expand_recurrence(task.recurrence, day, day)
+            if task.status in ACTIVE_STATUSES
+            and not task.no_timer
+            and expand_recurrence(task.recurrence, day, day)
         ),
         key=lambda task: task.id,
     )

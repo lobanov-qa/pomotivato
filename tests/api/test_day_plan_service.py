@@ -266,3 +266,18 @@ def test_clear_raises_not_found_when_session_history_pins_it_but_refuses_past(da
     shell = asyncio.run(scenario())
 
     assert shell.slots == ()
+
+
+@pytest.mark.api
+def test_add_refuses_no_timer_card_when_errand_cannot_enter_the_day(database, call):
+    """DF13: the dial and its sectors are for timer work only."""
+    day = DEFAULT_MOMENT.date()
+
+    async def scenario() -> Any:
+        async with call() as svc:
+            errand = await svc.task.create(task_factory(no_timer=True))
+        async with call() as svc:
+            await svc.day_plan.add(day, errand.id, day)
+
+    with pytest.raises(ValidationError, match="no-timer"):
+        asyncio.run(scenario())
