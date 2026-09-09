@@ -49,6 +49,7 @@ const TASKS: TaskDto[] = [
     benefit: null,
     cloned_from: null,
     no_timer: false,
+    blocks_done: null,
     created_at: "2026-09-06T09:00:00+00:00",
   },
 ];

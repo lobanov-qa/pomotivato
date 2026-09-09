@@ -9,6 +9,7 @@ import pytest
 from pomotivato.core.errors import DayPlanValidationError, RecurrenceValidationError
 from pomotivato.core.models import Daily, DayPlan, Once, Slot, WeeklyCount, WeeklyDays
 from pomotivato.core.schedule import expand_recurrence, move_slot
+from tests.factories.core_models import task_factory
 
 AUG_31 = date(2026, 8, 31)  # Monday
 SEP_6 = date(2026, 9, 6)  # Sunday
@@ -159,3 +160,42 @@ def test_move_slot_returns_new_object_leaving_source_frozen():
     assert order_of(source) == ("A", "B", "C")
     assert order_of(result) == ("B", "C", "A")
     assert result.id == source.id and result.date == source.date
+
+
+@pytest.mark.unit
+def test_on_dates_expands_to_the_ticked_days_in_range():  # R6 (DF8)
+    from pomotivato.core.models import OnDates
+
+    days = expand_recurrence(OnDates(frozenset({AUG_31, SEP_2, date(2026, 9, 20)})), AUG_31, SEP_6)
+
+    assert days == (AUG_31, SEP_2)  # the 20th is outside the window
+
+
+@pytest.mark.unit
+def test_on_dates_validation_bounds_count():  # V11 for the checkbox row
+    from datetime import date as d
+
+    from pomotivato.core.models import OnDates
+    from pomotivato.core.validation import validate_recurrence
+
+    validate_recurrence(OnDates(frozenset({d(2026, 9, 1)})))
+    with pytest.raises(RecurrenceValidationError):
+        validate_recurrence(OnDates(frozenset()))
+    with pytest.raises(RecurrenceValidationError):
+        validate_recurrence(OnDates(frozenset(d(2026, 9, i) for i in range(1, 16))))
+
+
+@pytest.mark.unit
+def test_repeat_days_ahead_lists_tomorrow_and_later():  # DF11 progress
+    from datetime import date
+
+    from pomotivato.core.models import Once, OnDates
+
+    today = date(2026, 9, 8)
+    ticked = task_factory(
+        recurrence=OnDates(frozenset({date(2026, 9, 7), today, date(2026, 9, 10)}))
+    )
+    assert ticked.repeat_days_ahead(today) == (date(2026, 9, 10),)
+
+    single = task_factory(recurrence=Once())
+    assert single.repeat_days_ahead(today) == ()

@@ -19,6 +19,7 @@ from pomotivato.core.models import (
     Daily,
     DayPlan,
     Once,
+    OnDates,
     Recurrence,
     Slot,
     WeeklyCount,
@@ -45,6 +46,8 @@ def expand_recurrence(recurrence: Recurrence, date_from: date, date_to: date) ->
             return tuple(d for d in _days_in_range(date_from, date_to) if d.weekday() in days)
         case WeeklyCount(n=n, start=start):
             return _expand_weekly_count(n, start, date_from, date_to)
+        case OnDates(days=ticked):
+            return tuple(sorted(day for day in ticked if date_from <= day <= date_to))
 
 
 def _validate_weekday_mask(days: frozenset[int]) -> None:

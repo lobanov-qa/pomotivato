@@ -15,6 +15,7 @@ from pomotivato.api.schemas import (
     TaskPatchDto,
 )
 from pomotivato.core.models import TaskStatus, TaskType
+from pomotivato.infra.repository_sessions import SegmentRepository
 from pomotivato.services.task_service import TaskService
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
@@ -40,7 +41,10 @@ async def list_tasks(
 ) -> list[TaskDto]:
     service = TaskService(session)
     tasks = await service.list(status=status, task_type=type, parent_id=parent_id)
-    return [TaskDto.from_core(task) for task in tasks]
+    # DF10: one grouped segment scan powers the "2 of 5" dots on the whole
+    # board — carried per task, the client never counts history itself.
+    done = await SegmentRepository(session).done_work_by_task()
+    return [TaskDto.from_core(task, blocks_done=done.get(task.id, 0)) for task in tasks]
 
 
 @router.get("/{task_id}", response_model=TaskDto)

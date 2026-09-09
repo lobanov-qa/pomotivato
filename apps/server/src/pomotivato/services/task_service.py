@@ -37,6 +37,8 @@ _PATCHABLE_FIELDS = frozenset(
         "done_criteria",
         "benefit",
         "no_timer",
+        # DF8: the sprint-day checkboxes edit the card's recurrence live.
+        "recurrence",
     }
 )
 

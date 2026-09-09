@@ -9,13 +9,15 @@ from __future__ import annotations
 
 import json
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pomotivato.core.models import (
     RepetitionState,
     Review,
     Segment,
+    SegmentPhase,
+    SegmentStatus,
     Session,
     SessionState,
     repetition_state_from_dict,
@@ -170,6 +172,21 @@ class SegmentRepository:
 
     async def exists(self, segment_id: str) -> bool:
         return await self._session.get(SegmentRow, segment_id) is not None
+
+    async def done_work_by_task(self) -> dict[str, int]:
+        """Count of COMPLETED work segments per task (spec 06 DF10 progress).
+
+        One grouped scan (desktop-scale, all tasks); the week/card views
+        read the "2 of 5" number from here so the count is the same one
+        the stats floor uses — never re-derived from another table.
+        """
+        stmt = select(SegmentRow.task_id, func.count()).where(
+            SegmentRow.phase == SegmentPhase.WORK.value,
+            SegmentRow.status == SegmentStatus.COMPLETED.value,
+            SegmentRow.task_id.is_not(None),
+        )
+        rows = await self._session.execute(stmt.group_by(SegmentRow.task_id))
+        return {task_id: count for task_id, count in rows.all() if task_id}
 
 
 class ReviewRepository:

@@ -13,6 +13,7 @@ import type { TaskDto, TaskType } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { t } from "@/i18n/ru";
 import { cn } from "@/lib/utils";
+import { isTicked, toggleDay } from "@/features/kanban/recurrence";
 import {
   QUADRANT_KEY,
   QUADRANT_VALUE,
@@ -24,13 +25,23 @@ import {
 interface Props {
   task: TaskDto;
   parents: TaskDto[];
+  /** DF8: the active sprint's days (iso + RU short label) for the tick row. */
+  sprintDays: { iso: string; label: string }[];
   onChange: (id: string, changes: Partial<TaskDto>) => void;
   onDelete: (id: string) => void;
   onClone: (id: string) => void;
   onClose: () => void;
 }
 
-export function TaskPanel({ task, parents, onChange, onDelete, onClone, onClose }: Props) {
+export function TaskPanel({
+  task,
+  parents,
+  sprintDays,
+  onChange,
+  onDelete,
+  onClone,
+  onClose,
+}: Props) {
   const [scienceOpen, setScienceOpen] = useState(true);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -160,6 +171,36 @@ export function TaskPanel({ task, parents, onChange, onDelete, onClone, onClose 
           />
           {t("kanban.field-no-timer")}
         </label>
+
+        {/* DF8 (spec 06): tick the sprint days this card repeats on. */}
+        <div className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">
+            {sprintDays.length > 0
+              ? t("kanban.field-repeat-days")
+              : t("kanban.field-repeat-days-no-sprint")}
+          </span>
+          <div className="flex flex-wrap gap-1" data-testid={`task-panel.days-${task.id}`}>
+            {sprintDays.map(({ iso, label }) => (
+              <button
+                key={iso}
+                type="button"
+                disabled={task.no_timer}
+                aria-pressed={isTicked(task.recurrence, iso)}
+                data-testid={`task-panel.day-${task.id}-${iso}`}
+                onClick={() => set({ recurrence: toggleDay(task.recurrence, iso) })}
+                className={cn(
+                  "rounded-md border px-2 py-1 text-xs transition-colors",
+                  isTicked(task.recurrence, iso)
+                    ? "border-primary bg-primary/10 font-medium text-primary"
+                    : "hover:bg-muted",
+                  task.no_timer && "pointer-events-none opacity-40",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <button
           type="button"

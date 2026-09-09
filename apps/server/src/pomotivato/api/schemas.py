@@ -36,6 +36,8 @@ class RecurrenceDto(BaseModel):
     weekdays: list[int] | None = None
     n: int | None = None
     start: date | None = None
+    # DF8 (spec 06): on_dates — the sprint-day checkbox row (1..14 days).
+    days: list[date] | None = None
 
 
 class TaskCreateDto(BaseModel):
@@ -89,11 +91,16 @@ class TaskPatchDto(BaseModel):
     done_criteria: str | None = None
     benefit: str | None = None
     no_timer: bool | None = None
+    # DF8 (spec 06): the checkbox row edits recurrence live on the card.
+    recurrence: RecurrenceDto | None = None
 
     def changes(self) -> dict[str, Any]:
         # exclude_unset: an explicit null clears a field, an absent key
         # leaves it untouched (PATCH semantics, spec 02 §5).
-        return self.model_dump(exclude_unset=True)
+        data = self.model_dump(exclude_unset=True, exclude={"recurrence"})
+        if self.recurrence is not None:
+            data["recurrence"] = recurrence_from_dict(self.recurrence.model_dump(exclude_none=True))
+        return data
 
 
 class TaskDto(BaseModel):
@@ -113,13 +120,17 @@ class TaskDto(BaseModel):
     cloned_from: str | None
     no_timer: bool
     created_at: str
+    # DF10 (spec 06): completed work blocks so far — the "2 of 5" dots.
+    # Only the list endpoint fills it (one grouped scan for the board);
+    # elsewhere it stays null, the card dot-row is a board concern.
+    blocks_done: int | None = None
 
     @classmethod
-    def from_core(cls, task: Task) -> TaskDto:
+    def from_core(cls, task: Task, blocks_done: int | None = None) -> TaskDto:
         data = to_dict(task)
         # to_dict flattens recurrence without its kind tag; restore it.
         data["recurrence"] = recurrence_to_dict(task.recurrence)
-        return cls(**data)
+        return cls(**data, blocks_done=blocks_done)
 
 
 class SlotDto(BaseModel):

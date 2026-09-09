@@ -28,6 +28,7 @@ function task(overrides: Partial<TaskDto> = {}): TaskDto {
     benefit: null,
     cloned_from: null,
     no_timer: false,
+    blocks_done: null,
     created_at: "2026-09-05T09:00:00+00:00",
     ...overrides,
   };
@@ -46,6 +47,7 @@ let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   frogId = null;
+  SPRINTS = [];
   fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url.startsWith("/api/tasks")) {
@@ -60,10 +62,15 @@ beforeEach(() => {
     if (url === "/api/settings") {
       return jsonResponse(200, SETTINGS_ON);
     }
+    if (url === "/api/sprints") {
+      return jsonResponse(200, SPRINTS);
+    }
     throw new Error(`unexpected fetch: ${url}`);
   });
   vi.stubGlobal("fetch", fetchMock);
 });
+
+let SPRINTS: unknown[] = [];
 
 const SETTINGS_ON = {
   session: {
@@ -145,6 +152,7 @@ describe("KanbanScreen", () => {
         return jsonResponse(200, { id: "p", date: "2026-09-05", slots: [] });
       }
       if (url === "/api/frog") return jsonResponse(200, { task_id: frogId });
+      if (url === "/api/sprints") return jsonResponse(200, []);
       throw new Error(`unexpected fetch: ${url}`);
     });
     renderScreen();
@@ -169,6 +177,7 @@ describe("KanbanScreen", () => {
         return jsonResponse(200, { id: "p", date: "2026-09-05", slots: [] });
       }
       if (url.pathname === "/api/frog") return jsonResponse(200, { task_id: frogId });
+      if (url.pathname === "/api/sprints") return jsonResponse(200, []);
       throw new Error(`unexpected fetch: ${url}`);
     });
     renderScreen();
@@ -200,6 +209,7 @@ describe("KanbanScreen", () => {
             ui: { max_in_work: 12, theme: "auto" },
           });
         }
+        if (url === "/api/sprints") return jsonResponse(200, []);
         return jsonResponse(200, { id: "p", date: "2026-09-05", slots: [] });
       },
     );
@@ -218,6 +228,98 @@ describe("KanbanScreen", () => {
       expect(body.title).toBe("Fresh card");
       expect(body.id).toMatch(/^task-/);
     });
+  });
+
+  it("ticks sprint days via the panel and PATCHes on_dates (DF8)", async () => {
+    const user = userEvent.setup();
+    // Stateful mock: PATCH mutates the live list and GET returns it — the
+    // second tick must build on the card the server already saved.
+    const live = BOARD.map((t) => ({ ...t }));
+    const sprint = {
+      id: "s-1",
+      number: 1,
+      name: "w37",
+      goal: null,
+      done_criteria: null,
+      start_date: "2026-09-07",
+      end_date: "2026-09-13",
+      status: "active",
+    };
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = String(init?.method ?? "GET").toUpperCase();
+      if (url === "/api/tasks" && method === "GET") return jsonResponse(200, live);
+      const patchMatch = /^\/api\/tasks\/([\w-]+)$/.exec(url);
+      if (patchMatch && method === "PATCH") {
+        const card = live.find((t) => t.id === patchMatch[1]);
+        if (!card) return jsonResponse(404, { detail: "gone" });
+        Object.assign(card, JSON.parse(String(init?.body)));
+        return jsonResponse(200, card);
+      }
+      if (url.startsWith("/api/day-plans/")) {
+        return jsonResponse(200, { id: "p", date: "2026-09-05", slots: [] });
+      }
+      if (url === "/api/frog") return jsonResponse(200, { task_id: frogId });
+      if (url === "/api/settings") return jsonResponse(200, SETTINGS_ON);
+      if (url === "/api/sprints") return jsonResponse(200, [sprint]);
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    renderScreen();
+
+    await user.click(await screen.findByTestId("task-card.edit-a"));
+    await user.click(await screen.findByTestId("task-panel.day-a-2026-09-09"));
+    await waitFor(() =>
+      expect(screen.getByTestId("task-panel.day-a-2026-09-09")).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      )
+    );
+    await user.click(screen.getByTestId("task-panel.day-a-2026-09-11"));
+
+    await waitFor(() => {
+      const patches = fetchMock.mock.calls
+        .filter(
+          ([url, init]) => url === "/api/tasks/a" && (init as RequestInit)?.method === "PATCH",
+        )
+        .map(([, init]) => JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>);
+      expect(patches.at(-1)?.recurrence).toEqual({
+        kind: "on_dates",
+        days: ["2026-09-09", "2026-09-11"],
+      });
+    });
+  });
+
+  it("shows the done/total dot row for a ticked card (DF10)", async () => {
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/tasks")) {
+        return jsonResponse(
+          200,
+          [
+            {
+              ...task({ id: "r" }),
+              recurrence: {
+                kind: "on_dates",
+                days: ["2026-09-09", "2026-09-10", "2026-09-11"],
+              },
+              blocks_done: 2,
+            },
+          ],
+        );
+      }
+      if (url.startsWith("/api/day-plans/")) {
+        return jsonResponse(200, { id: "p", date: "2026-09-05", slots: [] });
+      }
+      if (url === "/api/frog") return jsonResponse(200, { task_id: null });
+      if (url === "/api/settings") return jsonResponse(200, SETTINGS_ON);
+      if (url === "/api/sprints") return jsonResponse(200, []);
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    renderScreen();
+
+    const dots = await screen.findByTestId("task-card.progress-r");
+    expect(dots).toHaveTextContent("2/3");
+    expect(dots).toHaveAccessibleName("Прогресс: 2 из 3");
   });
 
   it("opens the side panel for ONE card (DF2 replaces column-wide edit)", async () => {
@@ -274,6 +376,7 @@ describe("KanbanScreen", () => {
         return jsonResponse(200, { id: "p", date: "2026-09-05", slots: [] });
       }
       if (url === "/api/frog") return jsonResponse(200, { task_id: frogId });
+      if (url === "/api/sprints") return jsonResponse(200, []);
       throw new Error(`unexpected fetch: ${url}`);
     });
     renderScreen();
