@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TaskDto } from "@/api/client";
@@ -352,6 +352,44 @@ describe("KanbanScreen", () => {
     const dots = await screen.findByTestId("task-card.progress-r");
     expect(dots).toHaveTextContent("2/3");
     expect(dots).toHaveAccessibleName("Прогресс: 2 из 3");
+  });
+
+  it("arrows reorder the dial plan as whole blocks (DF4-lite)", async () => {
+    const user = userEvent.setup();
+    const doing = [
+      task({ id: "c", title: "Doing card", status: "doing", estimate_blocks: 2 }),
+      task({ id: "x", title: "Second doing", status: "doing", estimate_blocks: 1 }),
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith("/api/day-plans/") && init?.method === "PUT") {
+          return jsonResponse(200, JSON.parse(String(init.body)) as { id: string });
+        }
+        if (url.startsWith("/api/tasks")) return jsonResponse(200, doing);
+        if (url.startsWith("/api/day-plans/"))
+          return jsonResponse(200, { id: "p", date: "2026-09-08", slots: [] });
+        if (url === "/api/frog") return jsonResponse(200, { task_id: null, reason: null });
+        if (url === "/api/settings/ui") return jsonResponse(200, { ui: { theme: "auto" } });
+        if (url === "/api/sprints") return jsonResponse(200, []);
+        return jsonResponse(404, { error: { code: "not_found", message: url } });
+      }),
+    );
+    render(<QueryClientProvider client={new QueryClient()}><KanbanScreen /></QueryClientProvider>);
+    // column order c(2 blocks) + x(1): sectors c,c,x — row shows both.
+    const order = await screen.findByTestId("kanban.planner-order");
+    expect(within(order).getByTestId("planner.order-c")).toBeTruthy();
+    await user.click(within(order).getByTestId("planner.order-up-x"));
+    await waitFor(() => {
+      const put = (fetch as ReturnType<typeof vi.fn>).mock.calls
+        .map(([url, init]) => ({ url: String(url), init: init as RequestInit | undefined }))
+        .find((call) => call.url.startsWith("/api/day-plans/") && call.init?.method === "PUT");
+      expect(put).toBeTruthy();
+      const body = JSON.parse(String(put?.init?.body)) as { slots: { task_id: string }[] };
+      // the whole x block jumped over the whole c block: x,c,c
+      expect(body.slots.map((s) => s.task_id)).toEqual(["x", "c", "c"]);
+    });
   });
 
   it("opens the side panel for ONE card (DF2 replaces column-wide edit)", async () => {

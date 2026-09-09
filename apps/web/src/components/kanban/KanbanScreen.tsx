@@ -9,7 +9,7 @@ import {
 } from "@dnd-kit/core";
 import { Plus } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, type TaskDto, type TaskStatus } from "@/api/client";
 import { KanbanColumn } from "@/components/kanban/KanbanColumn";
 import { TaskCard } from "@/components/kanban/TaskCard";
@@ -35,7 +35,7 @@ import {
   useTasks,
   TASKS_KEY,
 } from "@/features/kanban/hooks";
-import { deriveSlots, planIdForDate } from "@/features/kanban/planner";
+import { deriveSlots, moveTaskBlock, planIdForDate, taskGroups } from "@/features/kanban/planner";
 import { isFrogCard, needsWhenThen } from "@/features/kanban/science";
 import { sprintDays } from "@/features/kanban/recurrence";
 import { useSprints } from "@/features/sprints/hooks";
@@ -70,6 +70,22 @@ export function KanbanScreen() {
   const [conflictToast, setConflictToast] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
 
+  // DF4-lite: the stored plan carries the day's sequence — the "План дня"
+  // arrows POST /slots/move and this query refreshes, so the dial order
+  // survives drags (savedOrder pins deriveSlots; fresh tasks append).
+  const planQuery = useQuery({
+    queryKey: ["day-plan", today()],
+    queryFn: () => api.getDayPlan(today()).catch(() => null),
+    staleTime: 0,
+  });
+  const savedOrder = useMemo(
+    () =>
+      [...(planQuery.data?.slots ?? [])]
+        .sort((a, b) => a.sector - b.sector)
+        .map((slot) => slot.task_id),
+    [planQuery.data],
+  );
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
   );
@@ -81,8 +97,32 @@ export function KanbanScreen() {
 
   const planTasks = useMemo(() => {
     const doing = tasks.filter((task) => task.status === "doing");
-    return deriveSlots(doing);
-  }, [tasks]);
+    return deriveSlots(doing, savedOrder);
+  }, [tasks, savedOrder]);
+
+  // DF4-lite: one row per task (its estimate_blocks sectors travel as a
+  // block). The arrows swap whole blocks client-side and PUT the plan —
+  // one atomic order the server already validates; savedOrder refreshes
+  // and the dial starts in exactly this sequence. Hidden below two
+  // groups: a lone task has nothing to reorder.
+  const planGroups = useMemo(() => taskGroups(planTasks), [planTasks]);
+
+  const moveOrder = useMutation({
+    mutationFn: (cmd: { group: number; delta: number } | null) => {
+      if (!cmd) return Promise.resolve(null);
+      const next = moveTaskBlock(planTasks, cmd.group, cmd.delta);
+      if (next === planTasks) return Promise.resolve(null);
+      const date = today();
+      return api.putDayPlan({ id: planIdForDate(date), date, slots: next });
+    },
+    onSuccess: (plan) => {
+      if (plan) client.setQueryData(["day-plan", today()], plan);
+    },
+    onError: () => {
+      setConflictToast(t("kanban.conflict-moved-back"));
+      window.setTimeout(() => setConflictToast(null), 3500);
+    },
+  });
 
   /** DF8: the sprint-day tick row (labels in the board's dd.MM form). */
   const repeatDays = useMemo(
@@ -97,7 +137,7 @@ export function KanbanScreen() {
   /** Re-PUT the derived day plan after any doing-column change. */
   async function syncPlan(): Promise<void> {
     const latest = client.getQueryData<TaskDto[]>(TASKS_KEY) ?? [];
-    const slots = deriveSlots(latest.filter((task) => task.status === "doing"));
+    const slots = deriveSlots(latest.filter((task) => task.status === "doing"), savedOrder);
     const date = today();
     if (slots.length === 0) {
       // V9: an empty plan is not sendable — but it must still be forgotten
@@ -275,6 +315,52 @@ export function KanbanScreen() {
               </li>
             ))}
           </ol>
+        )}
+        {planGroups.length > 1 && (
+          <div className="mt-2" data-testid="kanban.planner-order">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              {t("kanban.planner-order-title")}
+            </p>
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+            {planGroups.map((group, index) => (
+              <span
+                key={group.taskId}
+                className="flex items-center gap-1 text-xs"
+                data-testid={`planner.order-${group.taskId}`}
+              >
+                <span className="max-w-36 truncate">{byId.get(group.taskId)?.title ?? "—"}</span>
+                <button
+                  type="button"
+                  aria-label={t("kanban.planner-up")}
+                  data-testid={`planner.order-up-${group.taskId}`}
+                  disabled={index === 0 || moveOrder.isPending}
+                  onClick={() =>
+                    void moveOrder.mutateAsync(
+                      index === 0 ? null : { group: index, delta: -1 },
+                    )
+                  }
+                  className="rounded px-1 hover:bg-muted disabled:opacity-30"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  aria-label={t("kanban.planner-down")}
+                  data-testid={`planner.order-down-${group.taskId}`}
+                  disabled={index === planGroups.length - 1 || moveOrder.isPending}
+                  onClick={() =>
+                    void moveOrder.mutateAsync(
+                      index === planGroups.length - 1 ? null : { group: index, delta: +1 },
+                    )
+                  }
+                  className="rounded px-1 hover:bg-muted disabled:opacity-30"
+                >
+                  ↓
+                </button>
+              </span>
+            ))}
+            </div>
+          </div>
         )}
       </section>
 
