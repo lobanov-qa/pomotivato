@@ -392,3 +392,15 @@ def test_task_list_carries_blocks_done_progress(http_app):
     assert listed[0]["blocks_done"] == 0  # fresh card: nothing worked yet
     single = http_app.get("/api/tasks/task-100")
     assert single.json()["blocks_done"] is None  # detail view: not a board concern
+
+
+@pytest.mark.api
+def test_task_list_carries_last_worked_for_the_week_filter(http_app):
+    """Filter batch over HTTP: the board scan carries the last worked day."""
+    http_app.post("/api/tasks", json=_task_payload())
+
+    listed = http_app.get("/api/tasks").json()
+
+    assert listed[0]["last_worked"] is None  # fresh card: never worked
+    body = http_app.get("/api/tasks/task-100").json()
+    assert body["last_worked"] is None  # detail: same null discipline

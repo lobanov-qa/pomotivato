@@ -43,8 +43,13 @@ async def list_tasks(
     tasks = await service.list(status=status, task_type=type, parent_id=parent_id)
     # DF10: one grouped segment scan powers the "2 of 5" dots on the whole
     # board — carried per task, the client never counts history itself.
-    done = await SegmentRepository(session).done_work_by_task()
-    return [TaskDto.from_core(task, blocks_done=done.get(task.id, 0)) for task in tasks]
+    segments = SegmentRepository(session)
+    done = await segments.done_work_by_task()
+    last = await segments.last_work_by_task()
+    return [
+        TaskDto.from_core(task, blocks_done=done.get(task.id, 0), last_worked=last.get(task.id))
+        for task in tasks
+    ]
 
 
 @router.get("/{task_id}", response_model=TaskDto)

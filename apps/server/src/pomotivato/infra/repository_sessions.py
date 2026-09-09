@@ -188,6 +188,20 @@ class SegmentRepository:
         rows = await self._session.execute(stmt.group_by(SegmentRow.task_id))
         return {task_id: count for task_id, count in rows.all() if task_id}
 
+    async def last_work_by_task(self) -> dict[str, str]:
+        """Latest COMPLETED work day per task (spec 06 filter batch).
+
+        ISO dates as text — the client compares them lexically; empty
+        days simply miss the map (never touched, never worked).
+        """
+        stmt = select(SegmentRow.task_id, func.max(SegmentRow.started_at)).where(
+            SegmentRow.phase == SegmentPhase.WORK.value,
+            SegmentRow.status == SegmentStatus.COMPLETED.value,
+            SegmentRow.task_id.is_not(None),
+        )
+        rows = await self._session.execute(stmt.group_by(SegmentRow.task_id))
+        return {task_id: started[:10] for task_id, started in rows.all() if task_id and started}
+
 
 class ReviewRepository:
     """Persistence for the reviews table (one review per segment)."""

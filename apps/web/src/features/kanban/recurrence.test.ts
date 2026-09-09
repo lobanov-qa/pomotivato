@@ -25,6 +25,7 @@ function task(overrides: Partial<TaskDto> = {}): TaskDto {
     cloned_from: null,
     no_timer: false,
     blocks_done: null,
+    last_worked: null,
     created_at: "2026-09-08T09:00:00+00:00",
     ...overrides,
   };
