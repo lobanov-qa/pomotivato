@@ -16,7 +16,15 @@ import { TaskCard } from "@/components/kanban/TaskCard";
 import { TaskPanel } from "@/components/kanban/TaskPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { BOARD_COLUMNS, columnOf, deleteErrorKey, dropTarget, type BoardColumn } from "@/features/kanban/board";
+import {
+  BOARD_COLUMNS,
+  columnOf,
+  deleteErrorKey,
+  dropTarget,
+  withinFilter,
+  type BoardColumn,
+  type BoardFilter,
+} from "@/features/kanban/board";
 import {
   useCloneTask,
   useCreateTask,
@@ -31,6 +39,7 @@ import { deriveSlots, planIdForDate } from "@/features/kanban/planner";
 import { isFrogCard, needsWhenThen } from "@/features/kanban/science";
 import { sprintDays } from "@/features/kanban/recurrence";
 import { useSprints } from "@/features/sprints/hooks";
+import { mondayOf } from "@/features/week/dates";
 import { useUiSettings } from "@/features/settings/hooks";
 import { t } from "@/i18n/ru";
 import { cn } from "@/lib/utils";
@@ -57,6 +66,7 @@ export function KanbanScreen() {
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [panelId, setPanelId] = useState<string | null>(null); // DF2 card panel
+  const [filter, setFilter] = useState<BoardFilter>("week"); // archive replacement
   const [conflictToast, setConflictToast] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
 
@@ -166,6 +176,26 @@ export function KanbanScreen() {
 
   return (
     <div className="flex flex-col gap-4" data-testid="kanban.screen">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold">{t("kanban.filter-title")}</h2>
+        <div className="flex gap-1" role="group" aria-label={t("kanban.filter-title")}>
+          {(["week", "all"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              data-testid={`kanban.filter-${value}`}
+              aria-pressed={filter === value}
+              onClick={() => setFilter(value)}
+              className={cn(
+                "rounded-md border px-3 py-1 text-xs transition-colors",
+                filter === value ? "border-primary bg-primary/10 font-medium text-primary" : "hover:bg-muted",
+              )}
+            >
+              {t(value === "week" ? "kanban.filter-week" : "kanban.filter-all")}
+            </button>
+          ))}
+        </div>
+      </div>
       <form
         className="flex gap-2"
         onSubmit={(e) => {
@@ -191,7 +221,11 @@ export function KanbanScreen() {
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setDraggedId(null)}>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {BOARD_COLUMNS.map((column) => {
-            const cards = columnOf(tasks, column);
+            const weekStart = mondayOf(today());
+            const cards = columnOf(
+              tasks.filter((task) => withinFilter(task, filter, weekStart)),
+              column,
+            );
             return (
               <KanbanColumn
                 key={column}

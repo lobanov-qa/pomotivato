@@ -38,6 +38,34 @@ export function columnOf(tasks: TaskDto[], column: BoardColumn): TaskDto[] {
   return tasks.filter((task) => task.status === column);
 }
 
+export type BoardFilter = "week" | "all";
+
+/**
+ * "This week / All" board filter (spec 06 §6, the archive replacement —
+ * author 08.09: done cards of closed weeks piled into a 14x8 carpet).
+ * Backlog and doing are always whole (backlog is the single pool, doing
+ * IS today); the rest belong to the week when they were worked since its
+ * monday, were born since it, or still carry a tick from it onward. An
+ * active recurring card is by definition future-facing — it stays. A
+ * one-off planned in an older week and never worked hides until "All".
+ */
+export function withinFilter(task: TaskDto, filter: BoardFilter, monday: string): boolean {
+  if (filter === "all") return true;
+  if (task.status === "backlog" || task.status === "doing") return true;
+  if ((task.last_worked ?? "") >= monday) return true;
+  if (task.created_at.slice(0, 10) >= monday) return true;
+  if (task.status === "done") return false;
+  const rec = task.recurrence;
+  if (rec.kind === "daily" || rec.kind === "weekly_days" || rec.kind === "weekly_count") {
+    return true;
+  }
+  if (rec.kind === "on_dates") {
+    const days = (rec.days as string[] | undefined) ?? [];
+    return days.some((day) => day >= monday);
+  }
+  return false;
+}
+
 /**
  * DF1 (spec 06): a rejected delete must say why in the user's language.
  * Maps the server message to a dictionary key; the EN server text stays

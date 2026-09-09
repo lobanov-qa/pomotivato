@@ -29,6 +29,8 @@ export interface TaskDto {
   no_timer: boolean;
   /** DF10: completed work blocks so far (board list only) — the "2 of 5". */
   blocks_done: number | null;
+  /** Filter batch: ISO day of the card's last completed block (list only). */
+  last_worked: string | null;
   created_at: string;
 }
 

@@ -124,13 +124,18 @@ class TaskDto(BaseModel):
     # Only the list endpoint fills it (one grouped scan for the board);
     # elsewhere it stays null, the card dot-row is a board concern.
     blocks_done: int | None = None
+    # DF3-filter (spec 06): the last day a block of this card was worked
+    # (ISO text), same board-scan discipline as blocks_done.
+    last_worked: str | None = None
 
     @classmethod
-    def from_core(cls, task: Task, blocks_done: int | None = None) -> TaskDto:
+    def from_core(
+        cls, task: Task, blocks_done: int | None = None, last_worked: str | None = None
+    ) -> TaskDto:
         data = to_dict(task)
         # to_dict flattens recurrence without its kind tag; restore it.
         data["recurrence"] = recurrence_to_dict(task.recurrence)
-        return cls(**data, blocks_done=blocks_done)
+        return cls(**data, blocks_done=blocks_done, last_worked=last_worked)
 
 
 class SlotDto(BaseModel):

@@ -29,7 +29,8 @@ function task(overrides: Partial<TaskDto> = {}): TaskDto {
     cloned_from: null,
     no_timer: false,
     blocks_done: null,
-    created_at: "2026-09-05T09:00:00+00:00",
+    last_worked: null,
+    created_at: `${new Date().toLocaleDateString("en-CA")}T09:00:00+00:00`,
     ...overrides,
   };
 }
@@ -287,6 +288,37 @@ describe("KanbanScreen", () => {
         days: ["2026-09-09", "2026-09-11"],
       });
     });
+  });
+
+  it("hides last week's done cards under 'This week' and brings them back (DF3-filter)", async () => {
+    const user = userEvent.setup();
+    const oldDone = {
+      ...task({ id: "old" }),
+      status: "done" as const,
+      created_at: "2020-01-02T09:00:00+00:00",
+      last_worked: "2020-01-03",
+    };
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith("/api/tasks")) return jsonResponse(200, [...BOARD, oldDone]);
+      if (url.startsWith("/api/day-plans/")) {
+        return jsonResponse(200, { id: "p", date: "2026-09-05", slots: [] });
+      }
+      if (url === "/api/frog") return jsonResponse(200, { task_id: frogId });
+      if (url === "/api/settings") return jsonResponse(200, SETTINGS_ON);
+      if (url === "/api/sprints") return jsonResponse(200, []);
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    renderScreen();
+    await screen.findByTestId("task-card.root-a");
+
+    expect(screen.queryByTestId("task-card.root-old")).not.toBeInTheDocument();
+    // today's Done card survives: it belongs to this week
+    expect(screen.getByTestId("task-card.root-d")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("kanban.filter-all"));
+
+    expect(await screen.findByTestId("task-card.root-old")).toBeInTheDocument();
   });
 
   it("shows the done/total dot row for a ticked card (DF10)", async () => {
