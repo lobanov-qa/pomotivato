@@ -24,8 +24,10 @@ from pomotivato.core.models import (
     Session,
     SessionSettings,
     SessionState,
+    TaskStatus,
 )
 from pomotivato.infra.errors import ConflictError, NotFoundError
+from pomotivato.infra.repository import TaskRepository
 from pomotivato.infra.repository_sessions import (
     ReviewRepository,
     SegmentRepository,
@@ -93,11 +95,29 @@ class SessionService:
         self._reviews = ReviewRepository(session)
 
     async def start(self, plan: DayPlan, settings: SessionSettings) -> SessionView:
+        await self._require_task_in_progress(plan)
         fsm = SessionFSM(clock=self._clock, day_plan=plan, settings=settings)
         fsm.start()
         self._registry.put(fsm)
         await self._persist(fsm)
         return self._view(fsm)
+
+    async def _require_task_in_progress(self, plan: DayPlan) -> None:
+        """Refuse a plan no «В работе» card can back (author's law 23.09).
+
+        The day plan is a projection of the doing column, and the server keeps
+        the row after a score walks the card out of «В работе» (planned while
+        repeat days remain, done when the ticks run out). Starting such a plan
+        would run an already-worked card again, so the refusal happens here
+        instead of being silently accepted. Server text is EN (source of
+        truth); the client renders the reason in the user's language.
+        """
+        in_progress = {
+            task.id for task in await TaskRepository(self._session).list(status=TaskStatus.DOING)
+        }
+        if not any(slot.task_id in in_progress for slot in plan.slots):
+            msg = f"day plan {plan.id!r} has no task in progress"
+            raise ConflictError(msg)
 
     async def command(self, session_id: str, verb: str) -> SessionView:
         fsm = await self._live_fsm(session_id)

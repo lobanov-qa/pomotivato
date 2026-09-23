@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from pomotivato.core.clock import FakeClock
 from pomotivato.main import create_app
+from tests.api.schemas_http import put_in_work
 from tests.factories.core_models import DEFAULT_MOMENT
 
 FAST = {
@@ -36,6 +37,7 @@ def http_app(tmp_path: Path) -> Iterator[tuple[TestClient, FakeClock]]:
     app.state.clock = clock
     with TestClient(app) as client:
         client.post("/api/tasks", json={"id": "t-1", "title": "Block A"})
+        put_in_work(client, "t-1")
         client.put(
             f"/api/day-plans/{DAY}",
             json={"id": "p-1", "date": DAY, "slots": [{"sector": 1, "task_id": "t-1"}]},

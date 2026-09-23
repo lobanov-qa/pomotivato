@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 
 from pomotivato.core.clock import FakeClock
 from pomotivato.main import create_app
-from tests.api.schemas_http import assert_detail_code
+from tests.api.schemas_http import assert_detail_code, put_in_work
 from tests.factories.core_models import DEFAULT_MOMENT
 
 FAST = {
@@ -40,6 +40,7 @@ def http_session(tmp_path: Path) -> Iterator[tuple[TestClient, FakeClock]]:
     with TestClient(app) as client:
         client.post("/api/tasks", json={"id": "t-1", "title": "First block"})
         client.post("/api/tasks", json={"id": "t-2", "title": "Second block"})
+        put_in_work(client, "t-1", "t-2")
         plan = {
             "id": "p-1",
             "date": DEFAULT_MOMENT.date().isoformat(),
@@ -103,6 +104,26 @@ def test_start_404s_when_day_plan_missing(http_session):
 
 
 @pytest.mark.api
+@pytest.mark.api
+def test_start_409s_when_no_slot_task_is_in_progress(http_session):
+    """Author's law 23.09: the plan mirrors the doing column, a stale one refuses."""
+    client, _clock = http_session
+    client.post("/api/tasks", json={"id": "t-free", "title": "Backlog only"})
+    today = DEFAULT_MOMENT.date().isoformat()
+    stored = client.put(
+        f"/api/day-plans/{today}",
+        json={"id": "p-2", "date": today, "slots": [{"sector": 1, "task_id": "t-free"}]},
+    )
+    assert stored.status_code == HTTPStatus.OK, stored.json()
+
+    response = client.post("/api/sessions", json={"day_plan_id": stored.json()["id"]})
+
+    assert response.status_code == HTTPStatus.CONFLICT
+    assert_detail_code(response, "conflict")
+    assert "no task in progress" in response.json()["detail"]["message"]
+
+
+@pytest.mark.api
 def test_pause_freezes_remaining_when_clock_keeps_running(http_session):
     client, clock = http_session
     session_id = _start(client, FAST)["id"]
@@ -161,6 +182,7 @@ def test_review_accepted_when_work_completed(http_session):
 def test_study_review_advances_repetition_queue_when_due(http_session, tmp_path):
     client, clock = http_session
     client.post("/api/tasks", json={"id": "t-study", "title": "Learn", "type": "study"})
+    put_in_work(client, "t-study")
     plan = {
         "id": "p-study",
         "date": DEFAULT_MOMENT.date().isoformat(),

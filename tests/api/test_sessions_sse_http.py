@@ -174,6 +174,10 @@ async def _start_session(app: FastAPI) -> str:
     t1 = await _request(app, "POST", "/api/tasks", {"id": "t-1", "title": "First block"})
     t2 = await _request(app, "POST", "/api/tasks", {"id": "t-2", "title": "Second block"})
     assert (t1[0], t2[0]) == (201, 201)
+    for task_id in ("t-1", "t-2"):
+        for status in ("planned", "doing"):
+            flipped = await _request(app, "POST", f"/api/tasks/{task_id}/status", {"to": status})
+            assert flipped[0] == 200, flipped
     plan = {
         "id": "p-1",
         "date": DEFAULT_MOMENT.date().isoformat(),

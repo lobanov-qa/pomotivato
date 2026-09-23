@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from pomotivato.core.clock import FakeClock
 from pomotivato.main import create_app
-from tests.api.schemas_http import assert_detail_code
+from tests.api.schemas_http import assert_detail_code, put_in_work
 from tests.factories.core_models import DEFAULT_MOMENT
 
 BASE_SETTINGS: dict[str, Any] = {
@@ -38,6 +38,7 @@ def http_session(tmp_path: Path) -> Iterator[tuple[TestClient, FakeClock]]:
     with TestClient(app) as client:
         client.post("/api/tasks", json={"id": "t-1", "title": "First block"})
         client.post("/api/tasks", json={"id": "t-2", "title": "Second block"})
+        put_in_work(client, "t-1", "t-2")
         plan = {
             "id": "p-1",
             "date": DEFAULT_MOMENT.date().isoformat(),
