@@ -247,4 +247,61 @@ describe("review flow on /focus", () => {
     expect(screen.getByTestId("summary.stat-blocks")).toHaveTextContent("1 / 2");
     expect(screen.getByTestId("summary.stat-focus")).toHaveTextContent("10 мин");
   });
+
+  it("start button disables once the score walks the card out of «В работе»", async () => {
+    const user = userEvent.setup();
+    // Server truth after the verdict (spec 06 DF9–11): the scored-off card is
+    // back in «Запланировано», so the dial has nothing left to run.
+    let tasks: TaskDto[] = TASKS.map((task) => ({ ...task }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const json = (status: number, body: unknown) =>
+          new Response(JSON.stringify(body), {
+            status,
+            headers: { "content-type": "application/json" },
+          });
+        if (url.startsWith("/api/status")) {
+          return json(200, {
+            active: true,
+            session_id: "s-1",
+            state: current.state,
+            phase: current.phase,
+            remaining_sec: current.remaining_sec,
+            server_now: "2026-09-06T09:12:00+00:00",
+            date: "2026-09-06",
+          });
+        }
+        if (url.startsWith("/api/tasks")) return json(200, tasks);
+        if (url.startsWith("/api/hints")) return json(200, []);
+        if (url === "/api/reviews" && init?.method === "POST") {
+          tasks = TASKS.map((task) => ({ ...task, status: "planned" as const }));
+          current = session({ state: "finished", phase: null, remaining_sec: 0 });
+          return json(201, { segment_id: CLOSED_WORK.id, score: 4, comment: null });
+        }
+        if (url.startsWith("/api/sessions/s-1")) return json(200, current);
+        if (url.startsWith("/api/summary")) {
+          return json(200, {
+            date: "2026-09-06",
+            blocks_done: 1,
+            blocks_planned: 2,
+            focus_min: 10,
+            average_score: 4,
+            reviews_count: 1,
+            tasks_done: 0,
+          });
+        }
+        return json(404, { detail: { code: "not_found", message: url } });
+      }),
+    );
+
+    renderScreen();
+    await screen.findByTestId("review.modal");
+    await user.click(screen.getByTestId("review.scale-4"));
+    await user.click(screen.getByTestId("review.submit"));
+
+    const start = await screen.findByTestId("dial.start-button");
+    await waitFor(() => expect(start).toBeDisabled());
+  });
 });

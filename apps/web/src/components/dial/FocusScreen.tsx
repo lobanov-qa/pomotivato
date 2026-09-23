@@ -19,7 +19,7 @@ import { SummaryPanel } from "@/components/dial/SummaryPanel";
 import { Button } from "@/components/ui/button";
 import { HintCard } from "@/components/dial/HintCard";
 import { useHints } from "@/features/science/hooks";
-import { useTasks } from "@/features/kanban/hooks";
+import { invalidateBoard, useTasks } from "@/features/kanban/hooks";
 import { deriveSlots } from "@/features/kanban/planner";
 import { useSessionEvents } from "@/features/dial/useSessionEvents";
 import { type PhaseName } from "@/features/dial/geometry";
@@ -136,6 +136,12 @@ export function FocusScreen() {
     if (!pendingReview) return;
     await reviewError.mutateAsync({ segment_id: pendingReview.id, ...payload });
     setDismissed((ids) => ids.filter((id) => id !== pendingReview.id));
+    // The score IS the day's verdict (spec 06 DF9-11): the server walks the
+    // card out of «В работе» (planned while repeat days remain, done when the
+    // last tick is spent), so the board copy must be pulled again. Without
+    // this the dial keeps a stale doing list and still offers Start for a
+    // card that is already «Запланировано» -- only a remount healed it.
+    invalidateBoard(client);
     await refetch().catch(() => undefined);
   }
 

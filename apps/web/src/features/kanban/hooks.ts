@@ -20,8 +20,9 @@ export function useFrogId() {
 }
 
 /** Any task mutation can flip the frog (status/estimate edits): invalidate
- * both keys so the badge and the board always agree (one helper, 4 sites). */
-function invalidateBoard(client: ReturnType<typeof useQueryClient>): void {
+ * both keys so the badge and the board always agree (one helper, 5 sites —
+ * the fifth is the score verdict on /focus, which moves the card server-side). */
+export function invalidateBoard(client: ReturnType<typeof useQueryClient>): void {
   void client.invalidateQueries({ queryKey: TASKS_KEY });
   void client.invalidateQueries({ queryKey: FROG_KEY });
 }
