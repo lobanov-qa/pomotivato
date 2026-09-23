@@ -12,7 +12,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pause, Play, SkipForward, Square } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { api, type SessionDto } from "@/api/client";
+import { api, ApiError, type SessionDto } from "@/api/client";
 import { Dial } from "@/components/dial/Dial";
 import { ReviewModal } from "@/components/dial/ReviewModal";
 import { SummaryPanel } from "@/components/dial/SummaryPanel";
@@ -127,6 +127,9 @@ export function FocusScreen() {
   }, [session, dismissed]);
 
   const reviewError = useMutation({ mutationFn: api.submitReview });
+  // Author's law 23.09: the server refuses a plan no «В работе» card backs;
+  // the dial must say so in the user's language instead of failing silently.
+  const [startBlocked, setStartBlocked] = useState(false);
 
   async function submitReview(payload: {
     score: number;
@@ -154,6 +157,7 @@ export function FocusScreen() {
         const planId =
           plan?.id ?? (await api.putDayPlan({ id: `plan-${date}`, date, slots: plannedToday })).id;
         await api.startSession({ day_plan_id: planId });
+        setStartBlocked(false);
       } else if (verb === "pause" && session) {
         await api.pauseSession(session.id);
       } else if (verb === "resume" && session) {
@@ -163,6 +167,12 @@ export function FocusScreen() {
       } else if (verb === "skip" && session) {
         await api.skipBreak(session.id);
       }
+    } catch (error) {
+      if (verb === "start" && error instanceof ApiError && error.status === 409) {
+        setStartBlocked(true);
+        return;
+      }
+      throw error;
     } finally {
       // Server is the authority: pull the fresh view immediately (the SSE
       // snapshot will confirm it, but the UI must not wait on the stream).
@@ -267,6 +277,11 @@ export function FocusScreen() {
       {plannedToday.length === 0 && !running && (
         <p className="text-sm text-muted-foreground" data-testid="dial.no-plan">
           {t("dial.no-plan")}
+        </p>
+      )}
+      {startBlocked && plannedToday.length > 0 && !running && (
+        <p className="text-sm text-warning" data-testid="dial.start-blocked">
+          {t("dial.start-blocked")}
         </p>
       )}
       {/* numbered sector legend: which tasks the dial holds, in order */}

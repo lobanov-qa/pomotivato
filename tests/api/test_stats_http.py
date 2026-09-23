@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 
 from pomotivato.core.clock import FakeClock
 from pomotivato.main import create_app
+from tests.api.schemas_http import put_in_work
 from tests.factories.core_models import DEFAULT_MOMENT
 
 FAST = {
@@ -55,6 +56,8 @@ def http_app(tmp_path: Path) -> Iterator[tuple[TestClient, FakeClock]]:
 
 
 def _start(client: TestClient) -> dict[str, Any]:
+    """Walk the plan cards into «В работе» (V7 funnel) and run the dial."""
+    put_in_work(client, "t-1", "t-2")
     response = client.post("/api/sessions", json={"day_plan_id": "p-1", "settings": FAST})
     assert response.status_code == HTTPStatus.CREATED
     return dict(response.json())

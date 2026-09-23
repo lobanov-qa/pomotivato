@@ -231,4 +231,55 @@ describe("FocusScreen", () => {
       expect(gets).toBeGreaterThan(getsBefore);
     });
   });
+
+  it("explains a refused start in the user's language (author's law 23.09)", async () => {
+    const user = userEvent.setup();
+    current = null; // no live session: the dial offers Start
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const json = (status: number, body: unknown) =>
+          new Response(JSON.stringify(body), {
+            status,
+            headers: { "content-type": "application/json" },
+          });
+        if (url.startsWith("/api/status")) {
+          return json(200, {
+            active: false,
+            session_id: null,
+            state: null,
+            phase: null,
+            remaining_sec: null,
+            server_now: "2026-09-06T09:00:00+00:00",
+            date: "2026-09-06",
+          });
+        }
+        if (url.startsWith("/api/tasks")) return json(200, TASKS);
+        if (url.startsWith("/api/day-plans/")) {
+          return json(200, {
+            id: "p-1",
+            date: "2026-09-06",
+            slots: [
+              { sector: 1, task_id: "t-1" },
+              { sector: 2, task_id: "t-1" },
+            ],
+          });
+        }
+        if (url === "/api/sessions" && init?.method === "POST") {
+          return json(409, {
+            detail: { code: "conflict", message: "day plan 'p-1' has no task in progress" },
+          });
+        }
+        return json(404, { detail: { code: "not_found", message: url } });
+      }),
+    );
+
+    renderScreen();
+    await user.click(await screen.findByTestId("dial.start-button"));
+
+    expect(await screen.findByTestId("dial.start-blocked")).toHaveTextContent(
+      "нет ни одной задачи «В работе»",
+    );
+  });
 });

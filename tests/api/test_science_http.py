@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from pomotivato.core.clock import FakeClock
 from pomotivato.main import create_app
-from tests.api.schemas_http import assert_detail_code
+from tests.api.schemas_http import assert_detail_code, put_in_work
 from tests.factories.core_models import DEFAULT_MOMENT
 
 TODAY = DEFAULT_MOMENT.date()  # frozen clock: the server's "today" is this
@@ -151,6 +151,7 @@ def test_diffuse_hint_fires_during_break_on_the_wire(http_client):
     client, clock = http_client
     make_task(client, "t-w", estimate_blocks=2)
     plan_for(client, TODAY, [{"sector": 1, "task_id": "t-w"}, {"sector": 2, "task_id": "t-w"}])
+    put_in_work(client, "t-w")
     started = client.post(
         "/api/sessions", json={"day_plan_id": f"plan-{TODAY}", "settings": FAST}
     ).json()
@@ -172,6 +173,7 @@ def test_einstellung_fires_after_two_interrupted_tomatoes(http_client):
     client, clock = http_client
     make_task(client, "t-x")
     plan_for(client, TODAY, [{"sector": 1, "task_id": "t-x"}])
+    put_in_work(client, "t-x")
     for _rounds in range(2):
         session = client.post(
             "/api/sessions", json={"day_plan_id": f"plan-{TODAY}", "settings": FAST}
@@ -192,6 +194,7 @@ def test_overlearning_fires_on_wall_burn_beyond_estimate(http_client):
     client, clock = http_client
     make_task(client, "t-o")
     plan_for(client, TODAY, [{"sector": 1, "task_id": "t-o"}])
+    put_in_work(client, "t-o")
     session = client.post(
         "/api/sessions", json={"day_plan_id": f"plan-{TODAY}", "settings": FAST}
     ).json()
@@ -217,6 +220,7 @@ def test_due_queue_empty_until_a_study_review_lands(http_client):
 
     make_task(client, "t-study", type="study")
     plan_for(client, TODAY, [{"sector": 1, "task_id": "t-study"}])
+    put_in_work(client, "t-study")
     session = client.post(
         "/api/sessions", json={"day_plan_id": f"plan-{TODAY}", "settings": FAST}
     ).json()
@@ -278,6 +282,7 @@ def test_review_delivers_recall_notes_and_reward_persisted(http_client):
     client, clock = http_client
     make_task(client, "t-note", type="study")
     plan_for(client, TODAY, [{"sector": 1, "task_id": "t-note"}])
+    put_in_work(client, "t-note")
     session = client.post(
         "/api/sessions", json={"day_plan_id": f"plan-{TODAY}", "settings": FAST}
     ).json()
@@ -313,6 +318,7 @@ def test_review_without_new_fields_keeps_e3_shape(http_client):
     client, clock = http_client
     make_task(client, "t-plain")
     plan_for(client, TODAY, [{"sector": 1, "task_id": "t-plain"}])
+    put_in_work(client, "t-plain")
     session = client.post(
         "/api/sessions", json={"day_plan_id": f"plan-{TODAY}", "settings": FAST}
     ).json()
