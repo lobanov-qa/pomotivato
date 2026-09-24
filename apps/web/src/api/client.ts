@@ -27,8 +27,11 @@ export interface TaskDto {
   cloned_from: string | null;
   /** DF13 (spec 06): board-only errand — no timer, no dial, no report. */
   no_timer: boolean;
-  /** DF10: completed work blocks so far (board list only) — the "2 of 5". */
+  /** DF10: completed work blocks so far (board list only) — the day math. */
   blocks_done: number | null;
+  /** Author's law 23.09: TICKED days already worked (board list only) — the
+   * card dots count days, not blocks: two sessions in a day are one day. */
+  days_done: number | null;
   /** Filter batch: ISO day of the card's last completed block (list only). */
   last_worked: string | null;
   created_at: string;

@@ -199,3 +199,17 @@ def test_repeat_days_ahead_lists_tomorrow_and_later():  # DF11 progress
 
     single = task_factory(recurrence=Once())
     assert single.repeat_days_ahead(today) == ()
+
+
+@pytest.mark.unit
+def test_ticked_days_worked_counts_only_ticked_worked_days():  # author 23.09
+    from datetime import date
+
+    from pomotivato.core.models import Once, OnDates
+
+    worked = frozenset({date(2026, 9, 8), date(2026, 9, 9)})
+    ticked = task_factory(recurrence=OnDates(frozenset({date(2026, 9, 8), date(2026, 9, 11)})))
+    assert ticked.ticked_days_worked(worked) == 1  # 09-09 was worked, not ticked
+
+    untickable = task_factory(recurrence=Once())
+    assert untickable.ticked_days_worked(worked) == 0

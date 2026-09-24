@@ -7,6 +7,7 @@ created_at is deterministic without monkeypatching (injectable clock).
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import timedelta
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any
@@ -16,8 +17,16 @@ from fastapi.testclient import TestClient
 
 from pomotivato.core.clock import FakeClock
 from pomotivato.main import create_app
-from tests.api.schemas_http import TaskDto, assert_detail_code
+from tests.api.schemas_http import TaskDto, assert_detail_code, put_in_work
 from tests.factories.core_models import DEFAULT_MOMENT
+
+FAST = {
+    "work_min": 10,
+    "break_min": 5,
+    "long_break_min": 15,
+    "long_break_every": 2,
+    "auto_start_next": False,
+}
 
 
 @pytest.fixture
@@ -27,6 +36,16 @@ def http_app(tmp_path: Path) -> Iterator[TestClient]:
     app.state.clock = FakeClock(DEFAULT_MOMENT)
     with TestClient(app) as client:
         yield client
+
+
+@pytest.fixture
+def ticked_worked_app(tmp_path: Path) -> Iterator[tuple[TestClient, FakeClock]]:
+    """Client + owning clock: counting worked days needs a block to close."""
+    app = create_app(tmp_path / "resources-days-test.db")
+    clock = FakeClock(DEFAULT_MOMENT)
+    app.state.clock = clock
+    with TestClient(app) as client:
+        yield client, clock
 
 
 def _task_payload(**overrides: Any) -> dict[str, Any]:
@@ -404,3 +423,48 @@ def test_task_list_carries_last_worked_for_the_week_filter(http_app):
     assert listed[0]["last_worked"] is None  # fresh card: never worked
     body = http_app.get("/api/tasks/task-100").json()
     assert body["last_worked"] is None  # detail: same null discipline
+
+
+@pytest.mark.api
+def test_task_list_counts_worked_days_not_blocks(ticked_worked_app):
+    """Author's law 23.09: two sessions in one day fill one day, not two."""
+    client, clock = ticked_worked_app
+    day = DEFAULT_MOMENT.date()
+    plan_id = f"plan-{day.isoformat()}"
+    client.post(
+        "/api/tasks",
+        json=_task_payload(
+            id="task-day",
+            title="Ticked twice",
+            estimate_blocks=1,
+            recurrence={
+                "kind": "on_dates",
+                "days": [day.isoformat(), (day + timedelta(days=1)).isoformat()],
+            },
+        ),
+    )
+    put_in_work(client, "task-day")
+    client.put(
+        f"/api/day-plans/{day.isoformat()}",
+        json={
+            "id": plan_id,
+            "date": day.isoformat(),
+            "slots": [{"sector": 1, "task_id": "task-day"}],
+        },
+    )
+
+    first = client.post("/api/sessions", json={"day_plan_id": plan_id, "settings": FAST}).json()
+    clock.advance(timedelta(minutes=11))
+    client.get(f"/api/sessions/{first['id']}")  # catch-up closes the block
+    client.post(f"/api/sessions/{first['id']}/stop")
+
+    once = client.get("/api/tasks").json()[0]
+    assert (once["blocks_done"], once["days_done"]) == (1, 1)
+
+    second = client.post("/api/sessions", json={"day_plan_id": plan_id, "settings": FAST}).json()
+    clock.advance(timedelta(minutes=11))
+    client.get(f"/api/sessions/{second['id']}")  # a second block, same day
+    client.post(f"/api/sessions/{second['id']}/stop")
+
+    twice = client.get("/api/tasks").json()[0]
+    assert (twice["blocks_done"], twice["days_done"]) == (2, 1)

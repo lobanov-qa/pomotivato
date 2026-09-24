@@ -150,6 +150,17 @@ class Task:
         horizon = today + timedelta(days=MAX_ON_DATES + 7)
         return tuple(d for d in expand_recurrence(self.recurrence, today, horizon) if d > today)
 
+    def ticked_days_worked(self, worked_days: frozenset[date]) -> int:
+        """Author's law 23.09: the card dots count DAYS, not blocks.
+
+        A ticked day is closed when that day already carries a completed work
+        block of this card; two sessions in one day are still one day. Only the
+        ticked-day model has dots — Once and formula cards count nothing.
+        """
+        if not isinstance(self.recurrence, OnDates):
+            return 0
+        return sum(1 for day in self.recurrence.days if day in worked_days)
+
 
 @dataclass(frozen=True, slots=True)
 class DayPlan:

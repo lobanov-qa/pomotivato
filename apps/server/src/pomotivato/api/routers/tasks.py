@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Query, Response
@@ -41,13 +42,21 @@ async def list_tasks(
 ) -> list[TaskDto]:
     service = TaskService(session)
     tasks = await service.list(status=status, task_type=type, parent_id=parent_id)
-    # DF10: one grouped segment scan powers the "2 of 5" dots on the whole
-    # board — carried per task, the client never counts history itself.
+    # DF10: one grouped segment scan powers the card dots on the whole board —
+    # carried per task, the client never counts history itself. The dots read
+    # the worked-day count (author 23.09), the block count feeds the day math.
     segments = SegmentRepository(session)
     done = await segments.done_work_by_task()
     last = await segments.last_work_by_task()
+    worked = await segments.worked_days_by_task()
+    empty_days: frozenset[date] = frozenset()
     return [
-        TaskDto.from_core(task, blocks_done=done.get(task.id, 0), last_worked=last.get(task.id))
+        TaskDto.from_core(
+            task,
+            blocks_done=done.get(task.id, 0),
+            last_worked=last.get(task.id),
+            days_done=task.ticked_days_worked(worked.get(task.id, empty_days)),
+        )
         for task in tasks
     ]
 

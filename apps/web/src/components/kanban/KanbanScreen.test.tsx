@@ -29,6 +29,7 @@ function task(overrides: Partial<TaskDto> = {}): TaskDto {
     cloned_from: null,
     no_timer: false,
     blocks_done: null,
+    days_done: null,
     last_worked: null,
     created_at: `${new Date().toLocaleDateString("en-CA")}T09:00:00+00:00`,
     ...overrides,
@@ -334,7 +335,8 @@ describe("KanbanScreen", () => {
                 kind: "on_dates",
                 days: ["2026-09-09", "2026-09-10", "2026-09-11"],
               },
-              blocks_done: 2,
+              blocks_done: 5, // blocks do not fill the dots any more
+              days_done: 2,
             },
           ],
         );

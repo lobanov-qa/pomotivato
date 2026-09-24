@@ -8,6 +8,7 @@ segments/reviews/repetitions) are separate read-families anyway.
 from __future__ import annotations
 
 import json
+from datetime import date
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -187,6 +188,29 @@ class SegmentRepository:
         )
         rows = await self._session.execute(stmt.group_by(SegmentRow.task_id))
         return {task_id: count for task_id, count in rows.all() if task_id}
+
+    async def worked_days_by_task(self) -> dict[str, frozenset[date]]:
+        """Distinct days carrying a COMPLETED work block per task (author 23.09).
+
+        The card dots count days, not blocks: two sessions in one day are one
+        day. One grouped scan for the whole board; started_at is stored as ISO
+        text, so its date prefix is the day key.
+        """
+        stmt = (
+            select(SegmentRow.task_id, func.substr(SegmentRow.started_at, 1, 10))
+            .where(
+                SegmentRow.phase == SegmentPhase.WORK.value,
+                SegmentRow.status == SegmentStatus.COMPLETED.value,
+                SegmentRow.task_id.is_not(None),
+            )
+            .distinct()
+        )
+        rows = await self._session.execute(stmt)
+        worked: dict[str, set[date]] = {}
+        for task_id, day in rows.all():
+            if task_id and day:
+                worked.setdefault(task_id, set()).add(date.fromisoformat(day))
+        return {task_id: frozenset(days) for task_id, days in worked.items()}
 
     async def last_work_by_task(self) -> dict[str, str]:
         """Latest COMPLETED work day per task (spec 06 filter batch).
