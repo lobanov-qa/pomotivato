@@ -47,11 +47,15 @@ export function toggleDay(recurrence: Recurrence, iso: string): Recurrence {
   return { kind: "on_dates", days: [...current].sort() };
 }
 
-/** DF10/11 "2 of 5": done blocks over total ticks (null -> no dot row). */
+/** DF10/11 "2 of 5": worked TICKED days over total ticks (null -> no dots).
+ *
+ * Author's law 23.09: the filled dots are days, not blocks — a day with two
+ * sessions is still one day, so the server counts them (days_done).
+ */
 export function progressOf(task: TaskDto): { done: number; total: number } | null {
   if (task.no_timer) return null;
   if (task.recurrence.kind !== "on_dates") return null;
   const total = ((task.recurrence.days as string[] | undefined) ?? []).length;
   if (total === 0) return null;
-  return { done: Math.min(task.blocks_done ?? 0, total), total };
+  return { done: Math.min(task.days_done ?? 0, total), total };
 }

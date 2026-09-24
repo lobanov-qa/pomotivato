@@ -25,6 +25,7 @@ function task(overrides: Partial<TaskDto> = {}): TaskDto {
     cloned_from: null,
     no_timer: false,
     blocks_done: null,
+    days_done: null,
     last_worked: null,
     created_at: "2026-09-08T09:00:00+00:00",
     ...overrides,
@@ -65,20 +66,21 @@ describe("isTicked / toggleDay", () => {
 });
 
 describe("progressOf", () => {
-  it("reports done/total for a ticked card only", () => {
+  it("reports worked ticked days over total ticks for a ticked card only", () => {
     const ticked = task({
       recurrence: { kind: "on_dates", days: ["2026-09-09", "2026-09-11"] },
-      blocks_done: 1,
+      days_done: 1,
     });
     expect(progressOf(ticked)).toEqual({ done: 1, total: 2 });
     expect(progressOf(task({ recurrence: { kind: "once" } }))).toBeNull();
-    expect(progressOf(task({ no_timer: true, blocks_done: 3 }))).toBeNull();
+    expect(progressOf(task({ no_timer: true, days_done: 2 }))).toBeNull();
   });
 
-  it("clamps done to total when history counts more blocks than ticks", () => {
+  it("keeps the block count out of the dots (days are the currency)", () => {
     const ticked = task({
       recurrence: { kind: "on_dates", days: ["2026-09-09"] },
-      blocks_done: 4, // two sessions a day is the user's business
+      blocks_done: 4, // two sessions in one day are still one day
+      days_done: 1,
     });
     expect(progressOf(ticked)).toEqual({ done: 1, total: 1 });
   });
