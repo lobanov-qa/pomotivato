@@ -11,16 +11,17 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pomotivato.core.errors import StatusTransitionError, ValidationError
+from pomotivato.core.errors import SprintMembershipError, StatusTransitionError, ValidationError
 from pomotivato.core.models import Task, TaskStatus, TaskType
 from pomotivato.core.validation import (
     validate_deadline_realism,
     validate_planning_ready,
     validate_status_transition,
     validate_task,
+    validate_task_sprint_membership,
 )
 from pomotivato.infra.errors import ConflictError, NotFoundError
-from pomotivato.infra.repository import DayPlanRepository, TaskRepository
+from pomotivato.infra.repository import DayPlanRepository, SprintRepository, TaskRepository
 from pomotivato.services.settings_service import SettingsService
 
 # Fields PATCH may touch; everything else is identity or derived.
@@ -39,6 +40,9 @@ _PATCHABLE_FIELDS = frozenset(
         "no_timer",
         # DF8: the sprint-day checkboxes edit the card's recurrence live.
         "recurrence",
+        # E4c (A36): a card edit may move it between active sprints; an
+        # explicit null takes it to the dateless "no sprint" shelf.
+        "sprint_id",
     }
 )
 
@@ -50,7 +54,27 @@ class TaskService:
         self._session = session
         self._tasks = TaskRepository(session)
         self._day_plans = DayPlanRepository(session)
+        self._sprints = SprintRepository(session)
         self._settings = SettingsService(session)
+
+    async def _require_container(self, task: Task) -> None:
+        """V18/V28/V19-membership (spec 07 §5): check the card against its box.
+
+        sprint_id=None is the sandbox shelf and always passes. A missing
+        sprint is 404 (V18); a planned/completed target or a tick outside
+        the period is 409 — the service turns core membership errors into
+        conflicts so clients can branch like every other funnel refusal.
+        """
+        if task.sprint_id is None:
+            return
+        sprint = await self._sprints.get(task.sprint_id)
+        if sprint is None:
+            msg = f"sprint {task.sprint_id!r} does not exist"
+            raise NotFoundError(msg)
+        try:
+            validate_task_sprint_membership(task, sprint)
+        except SprintMembershipError as err:
+            raise ConflictError(str(err)) from err
 
     async def create(self, task: Task) -> Task:
         validate_task(task)
@@ -62,6 +86,7 @@ class TaskService:
         if parent is not None and await self._tasks.get(parent) is None:
             msg = f"parent task {parent!r} does not exist"
             raise NotFoundError(msg)
+        await self._require_container(task)
         await self._tasks.add(task)
         await self._session.flush()
         return task
@@ -79,8 +104,16 @@ class TaskService:
         status: TaskStatus | None = None,
         task_type: TaskType | None = None,
         parent_id: str | None = None,
+        sprint_id: str | None = None,
+        no_sprint: bool = False,
     ) -> tuple[Task, ...]:
-        return await self._tasks.list(status=status, task_type=task_type, parent_id=parent_id)
+        return await self._tasks.list(
+            status=status,
+            task_type=task_type,
+            parent_id=parent_id,
+            sprint_id=sprint_id,
+            no_sprint=no_sprint,
+        )
 
     async def patch(self, task_id: str, changes: dict[str, Any]) -> Task:
         unknown = changes.keys() - _PATCHABLE_FIELDS
@@ -98,6 +131,9 @@ class TaskService:
         elif updated.parent_id == task_id:
             msg = "task cannot be its own parent"
             raise ValidationError(msg)
+        # A36 single move + A13 creation + A31 marks-outside (V19/V28): one
+        # gate for both paths; a card edit re-checks it against the new box.
+        await self._require_container(updated)
         await self._tasks.put(updated)
         await self._session.flush()
         return updated
@@ -147,6 +183,9 @@ class TaskService:
             cloned_from=task.id,
         )
         validate_task(clone)
+        # E4c/V28: a clone lands where its card lands — the same container
+        # gates run (a copy may not settle into a completed/planned sprint).
+        await self._require_container(clone)
         await self._tasks.add(clone)
         await self._session.flush()
         return clone

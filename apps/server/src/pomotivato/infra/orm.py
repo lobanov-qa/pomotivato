@@ -38,6 +38,12 @@ class TaskRow(Base):
     # DF13: board-only errand — never enters the dial, the capacity funnel
     # or the recurring-activation surface.
     no_timer: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    # E4c / ADR-0005 (spec 07 §3.1): sprint container owner; NULL is the
+    # dateless "no sprint" sandbox. Plain FK — deleting a sprint cascades in
+    # the service (V29, PR 2), SQLite FK enforcement is on per connection.
+    sprint_id: Mapped[str | None] = mapped_column(
+        ForeignKey("sprints.id"), nullable=True, index=True
+    )
     created_at: Mapped[str] = mapped_column(Text)
 
 

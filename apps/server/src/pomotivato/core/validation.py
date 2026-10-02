@@ -6,7 +6,7 @@ error kind instead of parsing messages.
 
 from __future__ import annotations
 
-from datetime import time
+from datetime import date, time
 
 from pomotivato.core.errors import (
     DayPlanValidationError,
@@ -14,6 +14,8 @@ from pomotivato.core.errors import (
     ReviewValidationError,
     ScienceFieldRequiredError,
     SettingsValidationError,
+    SprintMembershipError,
+    SprintWindowError,
     StatusTransitionError,
     TaskValidationError,
     ValidationError,
@@ -215,6 +217,39 @@ def validate_sprint_transition(old: SprintStatus, new: SprintStatus) -> None:
     if new not in _SPRINT_TRANSITIONS[old]:
         msg = f"illegal sprint status transition {old.value} -> {new.value}"
         raise ValidationError(msg)
+
+
+def validate_sprint_forward(sprint: Sprint, today: date) -> None:
+    """V19 creation half (spec 07): a new sprint starts no earlier than today.
+
+    DF18 (retrospective periods) is retired by A1/A20; the overlap half of
+    V19 lives in SprintService (a cross-row rule, no single row can see it).
+    """
+    if sprint.start_date < today:
+        msg = f"sprint start {sprint.start_date} is in the past (today {today})"
+        raise SprintWindowError(msg)
+
+
+def validate_task_sprint_membership(task: Task, sprint: Sprint) -> None:
+    """V19/V28 (spec 07 §5): the card fits its sprint container.
+
+    V28 first: only activated sprints take cards (A13) — completed is
+    closed in both directions, moves out of one go through the carry menu
+    (A40, PR 2). Then V19 membership: OnDates ticks must lie inside the
+    period; other recurrence kinds have no dates to check (Once cards are
+    period-agnostic).
+    """
+    if sprint.status is not SprintStatus.ACTIVE:
+        msg = f"sprint {sprint.number} is not activated; tasks need an active sprint"
+        raise SprintMembershipError(msg)
+    if isinstance(task.recurrence, OnDates):
+        outside = sorted(
+            day for day in task.recurrence.days if not sprint.start_date <= day <= sprint.end_date
+        )
+        if outside:
+            listed = ", ".join(day.isoformat() for day in outside)
+            msg = f"task day marks outside sprint period: {listed}"
+            raise SprintMembershipError(msg)
 
 
 def validate_planning_ready(task: Task, require_science_fields: bool) -> None:

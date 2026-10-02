@@ -132,6 +132,11 @@ class Task:
     # DF13 (spec 06): board-only errand (call, pick up) — no timer, no
     # report, no dial: lives on the kanban and never fills the funnel.
     no_timer: bool = False
+    # E4c / ADR-0005 (spec 07): the sprint container this card belongs to.
+    # None is the dateless "no sprint" sandbox (A8/A24) — no day ticks, no
+    # stats. Ownership used to be derived from the scheduled date (ADR-0003
+    # p.3); that part is superseded, the card now names its sprint.
+    sprint_id: str | None = None
 
     def repeat_days_ahead(self, today: date) -> tuple[date, ...]:
         """DF11 (spec 06): ticked/recurring days strictly after `today`.
@@ -255,10 +260,12 @@ class SprintStatus(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class Sprint:
-    """Thin named period (ADR-0003 p.3): 1..14 days, ≤1 active, no overlap.
+    """Named date period that contains task cards (ADR-0005, spec 07).
 
-    Tasks belong to a sprint by being scheduled inside its dates — there is
-    deliberately no sprint_id on tasks (scope guard: no Scrum ceremonies).
+    1..14 days, no period overlap. Since E4c the container relation is real:
+    tasks name their owner via `Task.sprint_id` (ADR-0003 p.3 superseded).
+    ADR-0005 A25 lifts the "≤1 active" invariant — periods alone keep the
+    current sprint unique.
     """
 
     id: str
@@ -399,6 +406,7 @@ def task_from_dict(data: Mapping[str, Any]) -> Task:
         benefit=data.get("benefit"),
         cloned_from=data.get("cloned_from"),
         no_timer=bool(data.get("no_timer", False)),
+        sprint_id=data.get("sprint_id"),
     )
 
 

@@ -1,9 +1,14 @@
-"""SprintService: thin named periods (spec 05 §3.10, ADR-0003 p.3).
+"""SprintService: named date periods that contain task cards (spec 07).
 
-Domain rules live in core validators (V14/V15); this service sequences
-reads/writes and owns the two cross-row invariants no single row can
-check: at most one ACTIVE sprint, and no period overlap with open
-(planned/active) history. Completed sprints are history and may overlap.
+Domain rules live in core validators (V14/V15/V19-creation); this service
+sequences reads/writes and owns the cross-row invariant no single row can
+check: V19's overlap half — periods must not intersect ANY existing sprint,
+completed included (ADR-0005 retires the DF18 exception; the legacy
+"completed sprints may be overlapped" rule is gone with it).
+
+The "at most one ACTIVE sprint" guard still holds in E4c PR 1; A25 lifts it
+in the lifecycle PR (non-overlapping periods already keep "current sprint"
+unique).
 """
 
 from __future__ import annotations
@@ -15,9 +20,14 @@ from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pomotivato.core.errors import ValidationError
+from pomotivato.core.clock import Clock
+from pomotivato.core.errors import SprintWindowError, ValidationError
 from pomotivato.core.models import Sprint, SprintStatus
-from pomotivato.core.validation import validate_sprint, validate_sprint_transition
+from pomotivato.core.validation import (
+    validate_sprint,
+    validate_sprint_forward,
+    validate_sprint_transition,
+)
 from pomotivato.infra.errors import ConflictError, NotFoundError
 from pomotivato.infra.repository import SprintRepository
 
@@ -28,9 +38,10 @@ _PATCHABLE = frozenset({"name", "goal", "done_criteria", "start_date", "end_date
 class SprintService:
     """Create, list and patch sprints; activate/completes via status."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, clock: Clock) -> None:
         self._session = session
         self._sprints = SprintRepository(session)
+        self._clock = clock
 
     async def create(
         self,
@@ -51,6 +62,14 @@ class SprintService:
             done_criteria=done_criteria,
         )
         validate_sprint(sprint)
+        # V19 creation half: no retrospective periods any more (DF18 retired);
+        # the clock is injected so tests stay deterministic. The spec maps
+        # V19 to 409 (state-of-the-world refusal), not 422 — same envelope
+        # as the overlap half below.
+        try:
+            validate_sprint_forward(sprint, self._clock.now().date())
+        except SprintWindowError as err:
+            raise ConflictError(str(err)) from err
         await self._require_no_overlap(sprint)
         await self._sprints.add(sprint)
         await self._session.flush()
@@ -103,5 +122,5 @@ class SprintService:
         hits = await self._sprints.overlapping(sprint.start_date, sprint.end_date, exclude_id)
         if hits:
             others = ", ".join(str(hit.number) for hit in hits)
-            msg = f"period overlaps open sprint(s) #{others}"
+            msg = f"period overlaps sprint(s) #{others}"
             raise ConflictError(msg)

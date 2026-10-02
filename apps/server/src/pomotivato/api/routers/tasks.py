@@ -24,6 +24,10 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 StatusFilter = Annotated[TaskStatus | None, Query()]
 TypeFilter = Annotated[TaskType | None, Query()]
 ParentFilter = Annotated[str | None, Query()]
+# Spec 07 §6: the board reads one scope at a time — a sprint container, or
+# the dateless shelf via no_sprint (client sends both as separate queries).
+SprintFilter = Annotated[str | None, Query()]
+NoSprintFilter = Annotated[bool, Query()]
 
 
 @router.post("", status_code=201, response_model=TaskDto)
@@ -39,9 +43,13 @@ async def list_tasks(
     status: StatusFilter = None,
     type: TypeFilter = None,
     parent_id: ParentFilter = None,
+    sprint_id: SprintFilter = None,
+    no_sprint: NoSprintFilter = False,
 ) -> list[TaskDto]:
     service = TaskService(session)
-    tasks = await service.list(status=status, task_type=type, parent_id=parent_id)
+    tasks = await service.list(
+        status=status, task_type=type, parent_id=parent_id, sprint_id=sprint_id, no_sprint=no_sprint
+    )
     # DF10: one grouped segment scan powers the card dots on the whole board —
     # carried per task, the client never counts history itself. The dots read
     # the worked-day count (author 23.09), the block count feeds the day math.

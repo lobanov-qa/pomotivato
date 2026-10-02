@@ -1,4 +1,10 @@
-"""HTTP floor for sprints: CRUD, numbering, overlap/active conflicts (spec 05 §3.10)."""
+"""HTTP floor for sprints: CRUD, numbering, V19 overlap/forward rules (spec 07).
+
+E4c PR 1 rewires the old E4b floor: frozen clock is 2026-09-03, so every
+created period starts today or later (V19 creation — DF18 retrospective
+periods retired); completed sprints are no longer overlap-exempt (V19 full
+scope, ADR-0005). The "one active" guard still lives here until PR 2 (A25).
+"""
 
 from __future__ import annotations
 
@@ -34,7 +40,7 @@ def post_sprint(client: TestClient, start: str, end: str, **extra: object) -> di
 
 @pytest.mark.api
 def test_create_assigns_server_numbers_and_lists_newest_first(http_app: TestClient) -> None:
-    first = post_sprint(http_app, "2026-09-01", "2026-09-07", name="w36")
+    first = post_sprint(http_app, "2026-09-03", "2026-09-07", name="w36")
     second = post_sprint(http_app, "2026-09-08", "2026-09-14", name="w37")
 
     assert first["number"] == 1 and second["number"] == 2
@@ -47,8 +53,21 @@ def test_create_assigns_server_numbers_and_lists_newest_first(http_app: TestClie
 
 
 @pytest.mark.api
+def test_retrospective_period_is_rejected_when_v19_creation_breaks(
+    http_app: TestClient,
+) -> None:
+    """E4c (ADR-0005): a sprint cannot start in the past any more — DF18 died."""
+    bad = http_app.post("/api/sprints", json={"start_date": "2026-09-01", "end_date": "2026-09-05"})
+
+    assert bad.status_code == HTTPStatus.CONFLICT
+    assert_detail_code(bad, "conflict")
+    assert "in the past" in bad.json()["detail"]["message"]
+    assert http_app.get("/api/sprints").json() == []  # rejected create stuck nothing
+
+
+@pytest.mark.api
 def test_overlap_with_open_sprint_is_conflict(http_app: TestClient) -> None:
-    post_sprint(http_app, "2026-09-01", "2026-09-07")
+    post_sprint(http_app, "2026-09-03", "2026-09-07")
 
     bad = http_app.post("/api/sprints", json={"start_date": "2026-09-05", "end_date": "2026-09-10"})
 
@@ -58,21 +77,22 @@ def test_overlap_with_open_sprint_is_conflict(http_app: TestClient) -> None:
 
 
 @pytest.mark.api
-def test_completed_sprint_may_be_overlapped_by_history(http_app: TestClient) -> None:
-    done = post_sprint(http_app, "2026-09-01", "2026-09-07")
+def test_completed_sprint_is_no_longer_overlap_exempt(http_app: TestClient) -> None:
+    """V19 full scope (spec 07 §5): non-overlap keeps "current sprint" unique."""
+    done = post_sprint(http_app, "2026-09-03", "2026-09-07")
     http_app.patch(f"/api/sprints/{done['id']}", json={"status": "active"})
     http_app.patch(f"/api/sprints/{done['id']}", json={"status": "completed"})
 
-    again = http_app.post(
-        "/api/sprints", json={"start_date": "2026-09-03", "end_date": "2026-09-08"}
+    clash = http_app.post(
+        "/api/sprints", json={"start_date": "2026-09-05", "end_date": "2026-09-08"}
     )
 
-    assert again.status_code == HTTPStatus.CREATED  # ⚑ Q9: history is not blocked
+    assert clash.status_code == HTTPStatus.CONFLICT
 
 
 @pytest.mark.api
 def test_only_one_active_sprint_at_a_time(http_app: TestClient) -> None:
-    first = post_sprint(http_app, "2026-09-01", "2026-09-07")
+    first = post_sprint(http_app, "2026-09-03", "2026-09-07")
     second = post_sprint(http_app, "2026-09-08", "2026-09-14")
     assert (
         http_app.patch(f"/api/sprints/{first['id']}", json={"status": "active"}).status_code
@@ -90,7 +110,7 @@ def test_only_one_active_sprint_at_a_time(http_app: TestClient) -> None:
 
 @pytest.mark.api
 def test_patch_edits_texts_and_period_and_revalidates(http_app: TestClient) -> None:
-    created = post_sprint(http_app, "2026-09-01", "2026-09-07", goal="ship E4b")
+    created = post_sprint(http_app, "2026-09-03", "2026-09-07", goal="ship E4b")
 
     edited = http_app.patch(
         f"/api/sprints/{created['id']}",
@@ -111,7 +131,7 @@ def test_unknown_sprint_is_404_and_bad_status_is_422(http_app: TestClient) -> No
     assert missing.status_code == HTTPStatus.NOT_FOUND
     assert_detail_code(missing, "not_found")
 
-    created = post_sprint(http_app, "2026-09-01", "2026-09-07")
+    created = post_sprint(http_app, "2026-09-03", "2026-09-07")
     bad = http_app.patch(f"/api/sprints/{created['id']}", json={"status": "canceled"})
     assert bad.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert_detail_code(bad, "invalid")
@@ -119,7 +139,7 @@ def test_unknown_sprint_is_404_and_bad_status_is_422(http_app: TestClient) -> No
 
 @pytest.mark.api
 def test_completed_cannot_reopen(http_app: TestClient) -> None:
-    created = post_sprint(http_app, "2026-09-01", "2026-09-07")
+    created = post_sprint(http_app, "2026-09-03", "2026-09-07")
     http_app.patch(f"/api/sprints/{created['id']}", json={"status": "active"})
     http_app.patch(f"/api/sprints/{created['id']}", json={"status": "completed"})
 
