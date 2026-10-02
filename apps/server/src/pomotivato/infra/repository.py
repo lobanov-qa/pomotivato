@@ -62,6 +62,7 @@ def _task_to_row(task: Task) -> TaskRow:
         benefit=task.benefit,
         cloned_from=task.cloned_from,
         no_timer=task.no_timer,
+        sprint_id=task.sprint_id,
         created_at=task.created_at.isoformat(),
     )
 
@@ -83,6 +84,7 @@ def _task_from_row(row: TaskRow) -> Task:
         "benefit": row.benefit,
         "cloned_from": row.cloned_from,
         "no_timer": bool(row.no_timer),
+        "sprint_id": row.sprint_id,
         "created_at": row.created_at,
     }
     return task_from_dict(data)
@@ -117,6 +119,8 @@ class TaskRepository:
         status: TaskStatus | None = None,
         task_type: TaskType | None = None,
         parent_id: str | None = None,
+        sprint_id: str | None = None,
+        no_sprint: bool = False,
     ) -> tuple[Task, ...]:
         # ISO UTC strings sort chronologically, so TEXT order is safe here.
         stmt = select(TaskRow).order_by(TaskRow.created_at, TaskRow.id)
@@ -126,6 +130,11 @@ class TaskRepository:
             stmt = stmt.where(TaskRow.type == task_type.value)
         if parent_id is not None:
             stmt = stmt.where(TaskRow.parent_id == parent_id)
+        if no_sprint:
+            # Spec 07 §6: the sandbox shelf is its own scope (sprint_id NULL).
+            stmt = stmt.where(TaskRow.sprint_id.is_(None))
+        elif sprint_id is not None:
+            stmt = stmt.where(TaskRow.sprint_id == sprint_id)
         rows = await self._session.scalars(stmt)
         return tuple(_task_from_row(row) for row in rows)
 
@@ -320,13 +329,13 @@ class SprintRepository:
     async def overlapping(
         self, start: date, end: date, exclude_id: str | None = None
     ) -> tuple[Sprint, ...]:
-        """Open sprints (planned/active) whose period touches [start, end].
+        """Any sprint whose period touches [start, end] — V19, spec 07.
 
-        Completed sprints are history: ADR-0003 lets a new period overlap
-        them (⚑ Q9, author-approved 07.09).
+        Completed sprints count since E4c: overlapping periods are banned
+        outright (ADR-0005 retires the DF18/Q9 exception, spec 07 §11 —
+        non-overlap is what keeps "the current sprint" unique after A25).
         """
         stmt = select(SprintRow).where(
-            SprintRow.status != SprintStatus.COMPLETED.value,
             SprintRow.start_date <= end.isoformat(),
             SprintRow.end_date >= start.isoformat(),
         )

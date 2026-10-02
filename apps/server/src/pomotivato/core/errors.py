@@ -46,3 +46,12 @@ class InvalidTransitionError(ValidationError):
 
 class InvalidReviewError(ValidationError):
     """Review refused: segment not reviewable or already reviewed (T17)."""
+
+
+class SprintWindowError(ValidationError):
+    """V19 creation half (spec 07): retrospective period, DF18 retired."""
+
+
+class SprintMembershipError(ValidationError):
+    """V19/V28 (spec 07): card marks fall outside the period, or the target
+    sprint is not activated; the service turns this into a 409 conflict."""

@@ -55,6 +55,8 @@ class TaskCreateDto(BaseModel):
     benefit: str | None = None
     cloned_from: str | None = None
     no_timer: bool = False
+    # E4c (spec 07 §6): the sprint container; None = the dateless shelf.
+    sprint_id: str | None = None
 
     def to_core(self, created_at: datetime) -> Task:
         return Task(
@@ -74,6 +76,7 @@ class TaskCreateDto(BaseModel):
             benefit=self.benefit,
             cloned_from=self.cloned_from,
             no_timer=self.no_timer,
+            sprint_id=self.sprint_id,
         )
 
 
@@ -93,6 +96,9 @@ class TaskPatchDto(BaseModel):
     no_timer: bool | None = None
     # DF8 (spec 06): the checkbox row edits recurrence live on the card.
     recurrence: RecurrenceDto | None = None
+    # E4c/A36: a set id moves the card (V28/V19-gated); an explicit null
+    # takes it off the sprint shelf (exclude_unset keeps absent = untouched).
+    sprint_id: str | None = None
 
     def changes(self) -> dict[str, Any]:
         # exclude_unset: an explicit null clears a field, an absent key
@@ -119,6 +125,8 @@ class TaskDto(BaseModel):
     benefit: str | None
     cloned_from: str | None
     no_timer: bool
+    # E4c/ADR-0005: the owning container; None is the "no sprint" shelf.
+    sprint_id: str | None
     created_at: str
     # DF10 (spec 06): completed work blocks so far (day summary / week math).
     # Only the list endpoint fills it (one grouped scan for the board);

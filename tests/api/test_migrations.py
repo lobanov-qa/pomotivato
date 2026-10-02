@@ -110,3 +110,33 @@ def test_no_timer_column_defaults_false_for_existing_rows(tmp_path):
         flag = connection.execute("SELECT no_timer FROM tasks WHERE id='old'").fetchone()[0]
 
     assert flag == 0
+
+
+@pytest.mark.api
+def test_sprint_id_link_and_fk_land_with_the_column(tmp_path):
+    """E4c hop: existing rows stay NULL (the shelf), the FK is enforced."""
+    path = tmp_path / "sprint-link-test.db"
+    upgrade_db(path, "3c9f80e2d1a7")
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "INSERT INTO tasks (id, title, type, important, urgent, status,"
+            " estimate_blocks, recurrence_json, created_at, no_timer)"
+            " VALUES ('old', 'Pre-E4c card', 'normal', 0, 0, 'backlog', 1, '{}',"
+            " '2026-09-01T00:00:00+00:00', 0)"
+        )
+
+    upgrade_db(path, HEAD)
+
+    with sqlite3.connect(path) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(tasks)").fetchall()}
+        linked = connection.execute("SELECT sprint_id FROM tasks WHERE id='old'").fetchone()[0]
+        fks = connection.execute("PRAGMA foreign_key_list(tasks)").fetchall()
+        # row layout: id, seq, table, from, to, on_update, on_delete, match
+        assert ("sprints", "sprint_id", "id") in {tuple(fk[2:5]) for fk in fks}
+        # Enforcement is per-connection (the app turns it on in db.py): the
+        # probe must ask for it the same way a runtime connection does.
+        connection.execute("PRAGMA foreign_keys=ON")
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute("UPDATE tasks SET sprint_id='sprint-ghost' WHERE id='old'")
+    assert "sprint_id" in columns
+    assert linked is None
