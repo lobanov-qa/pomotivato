@@ -11,6 +11,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
+from pomotivato.core.errors import ValidationError
 from pomotivato.core.models import (
     DayPlan,
     Review,
@@ -127,6 +128,8 @@ class TaskDto(BaseModel):
     no_timer: bool
     # E4c/ADR-0005: the owning container; None is the "no sprint" shelf.
     sprint_id: str | None
+    # V34/A40: the fate chosen at the owner's closure ('left'/'moved'/None).
+    carry_choice: str | None
     created_at: str
     # DF10 (spec 06): completed work blocks so far (day summary / week math).
     # Only the list endpoint fills it (one grouped scan for the board);
@@ -410,10 +413,61 @@ class SprintDto(BaseModel):
     goal: str | None
     done_criteria: str | None
     status: str
+    # E4c PR 2 enrichment (spec 07 §6): the "!" badge and the list filter
+    # are computed server-side so two windows never disagree.
+    unfinished_count: int = 0
+    carry_pending: int = 0
+    is_current: bool = False
 
     @classmethod
-    def from_core(cls, sprint: Sprint) -> SprintDto:
-        return cls(**to_dict(sprint))
+    def from_core(
+        cls,
+        sprint: Sprint,
+        *,
+        unfinished: int = 0,
+        pending: int = 0,
+        is_current: bool = False,
+    ) -> SprintDto:
+        return cls(
+            **to_dict(sprint),
+            unfinished_count=unfinished,
+            carry_pending=pending,
+            is_current=is_current,
+        )
+
+
+class SprintDetailDto(SprintDto):
+    """GET /api/sprints/{id}: the sprint card lists its tasks (spec 07 §6)."""
+
+    tasks: list[TaskDto] = Field(default_factory=list)
+
+
+class CarryChoiceDto(BaseModel):
+    """POST /api/tasks/{id}/carry-choice body (spec 07 §6, A40).
+
+    Exactly one answer: {leave: true} freezes the card; {target_sprint_id:
+    X} copies it into active sprint X; {target_sprint_id: null} copies it to
+    the dateless shelf. An empty body is a 422 — there is no default fate.
+    """
+
+    target_sprint_id: str | None = None
+    leave: bool = False
+
+    def decision(self) -> tuple[bool, str | None]:
+        if self.leave:
+            return True, None
+        if "target_sprint_id" not in self.model_fields_set:
+            # Core ValidationError rides the 422 handler (an empty body is
+            # a malformed request, not a 500 inside the route).
+            msg = "carry-choice needs target_sprint_id or leave=true"
+            raise ValidationError(msg)
+        return False, self.target_sprint_id
+
+
+class CarryAllResultDto(BaseModel):
+    """POST /api/sprints/{id}/carry-choice-all: how many cards were frozen."""
+
+    decided: int
 
 
 class DayPlanAddDto(BaseModel):

@@ -9,6 +9,7 @@ from fastapi import APIRouter, Query, Response
 
 from pomotivato.api.deps import ClockDep, DbSession
 from pomotivato.api.schemas import (
+    CarryChoiceDto,
     SetStatusDto,
     TaskCloneDto,
     TaskCreateDto,
@@ -91,6 +92,19 @@ async def set_task_status(task_id: str, dto: SetStatusDto, session: DbSession) -
 async def clone_task(task_id: str, dto: TaskCloneDto, session: DbSession) -> TaskDto:
     service = TaskService(session)
     return TaskDto.from_core(await service.clone(task_id, dto.id))
+
+
+@router.post("/{task_id}/carry-choice", response_model=TaskDto)
+async def carry_choice(
+    task_id: str, dto: CarryChoiceDto, session: DbSession, clock: ClockDep
+) -> TaskDto:
+    """A40/V34: the per-card fate menu (target active sprint / shelf / leave)."""
+    service = TaskService(session)
+    leave, target = dto.decision()
+    task = await service.resolve_carry(
+        task_id, target_sprint_id=target, leave=leave, today=clock.now().date()
+    )
+    return TaskDto.from_core(task)
 
 
 @router.delete("/{task_id}", status_code=204)

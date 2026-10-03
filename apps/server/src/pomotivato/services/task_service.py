@@ -7,12 +7,14 @@ only sequences reads/writes and turns core outcomes into infra errors.
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import date
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pomotivato.core.errors import SprintMembershipError, StatusTransitionError, ValidationError
-from pomotivato.core.models import Task, TaskStatus, TaskType
+from pomotivato.core.models import CarryChoice, Once, SprintStatus, Task, TaskStatus, TaskType
 from pomotivato.core.validation import (
     validate_deadline_realism,
     validate_planning_ready,
@@ -189,6 +191,60 @@ class TaskService:
         await self._tasks.add(clone)
         await self._session.flush()
         return clone
+
+    async def resolve_carry(
+        self, task_id: str, *, target_sprint_id: str | None, leave: bool, today: date
+    ) -> Task:
+        """V34/A40 (spec 07 §4.2): the fate menu for one unfinished card.
+
+        Three answers: a target ACTIVE sprint, the dateless shelf (None),
+        or 'leave' — the card freezes with its closed sprint forever. Move
+        and shelf are COPIES (A27): the original keeps its history row and
+        gets MOVED, the copy gets a new id, BACKLOG status, Once recurrence
+        (day ticks reset), and the deadline only if still real (A19). The
+        decision is immutable: a second call is a 409, not a re-write.
+        """
+        task = await self.get(task_id)
+        if task.sprint_id is None:
+            msg = "a card without a sprint has no carry decision to make"
+            raise ConflictError(msg)
+        if task.carry_choice is not None:
+            msg = f"fate of task {task_id!r} is already {task.carry_choice.value}"
+            raise ConflictError(msg)
+        if task.status in (TaskStatus.DONE, TaskStatus.ARCHIVED):
+            msg = "finished cards stay in the sprint history; nothing to carry"
+            raise ConflictError(msg)
+        if leave:
+            decided = replace(task, carry_choice=CarryChoice.LEFT)
+            await self._tasks.put(decided)
+            await self._session.flush()
+            return decided
+        if target_sprint_id is not None:
+            sprint = await self._sprints.get(target_sprint_id)
+            if sprint is None:
+                msg = f"sprint {target_sprint_id!r} does not exist"
+                raise NotFoundError(msg)
+            if sprint.status is not SprintStatus.ACTIVE:
+                msg = f"sprint {sprint.number} is not activated; carry needs an active sprint"
+                raise ConflictError(msg)
+        copy = replace(
+            task,
+            id=f"task-{uuid4().hex[:12]}",
+            status=TaskStatus.BACKLOG,
+            recurrence=Once(),
+            # A19: a deadline travels only while it still means something.
+            deadline=task.deadline if (task.deadline and task.deadline >= today) else None,
+            cloned_from=task.id,
+            sprint_id=target_sprint_id,
+            carry_choice=None,
+        )
+        validate_task(copy)
+        await self._require_container(copy)
+        decided = replace(task, carry_choice=CarryChoice.MOVED)
+        await self._tasks.add(copy)
+        await self._tasks.put(decided)
+        await self._session.flush()
+        return decided
 
     async def delete(self, task_id: str) -> None:
         task = await self.get(task_id)

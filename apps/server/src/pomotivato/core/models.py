@@ -34,6 +34,18 @@ class TaskType(StrEnum):
     # rows are swept to NORMAL by migration 8e5c31d7b9f4.
 
 
+class CarryChoice(StrEnum):
+    """V34/A40 (spec 07): fate of an unfinished card when its sprint closed.
+
+    LEFT freezes the card with the sprint forever; MOVED means a copy was
+    already created (where — via the copy's `cloned_from` lineage). None is
+    "no decision yet", which lights the "!" badge and blocks manual closure.
+    """
+
+    LEFT = "left"
+    MOVED = "moved"
+
+
 class SegmentPhase(StrEnum):
     WORK = "work"
     BREAK = "break"
@@ -137,6 +149,8 @@ class Task:
     # stats. Ownership used to be derived from the scheduled date (ADR-0003
     # p.3); that part is superseded, the card now names its sprint.
     sprint_id: str | None = None
+    # V34/A40: fate chosen at the owner sprint's closure; immutable once set.
+    carry_choice: CarryChoice | None = None
 
     def repeat_days_ahead(self, today: date) -> tuple[date, ...]:
         """DF11 (spec 06): ticked/recurring days strictly after `today`.
@@ -277,6 +291,10 @@ class Sprint:
     goal: str | None = None
     done_criteria: str | None = None
 
+    def covers(self, day: date) -> bool:
+        """The spec 07 glossary "спринт с текущей датой" (A25 uniqueness)."""
+        return self.start_date <= day <= self.end_date
+
 
 def to_dict(obj: Any) -> dict[str, Any]:
     """Serialize a core model to JSON-friendly plain values.
@@ -407,6 +425,9 @@ def task_from_dict(data: Mapping[str, Any]) -> Task:
         cloned_from=data.get("cloned_from"),
         no_timer=bool(data.get("no_timer", False)),
         sprint_id=data.get("sprint_id"),
+        carry_choice=_opt(
+            data.get("carry_choice"), lambda r: _enum(CarryChoice, r, "carry_choice")
+        ),
     )
 
 

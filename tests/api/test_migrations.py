@@ -140,3 +140,28 @@ def test_sprint_id_link_and_fk_land_with_the_column(tmp_path):
             connection.execute("UPDATE tasks SET sprint_id='sprint-ghost' WHERE id='old'")
     assert "sprint_id" in columns
     assert linked is None
+
+
+@pytest.mark.api
+def test_carry_choice_check_lands_and_rejects_unknown_fates(tmp_path):
+    """E4c PR 2 hop: the fate column arrives with its CHECK ('left','moved')."""
+    path = tmp_path / "carry-choice-test.db"
+    upgrade_db(path, "5a9c3f71b8e2")
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "INSERT INTO tasks (id, title, type, important, urgent, status,"
+            " estimate_blocks, recurrence_json, created_at, no_timer)"
+            " VALUES ('old', 'Pre-fate card', 'normal', 0, 0, 'backlog', 1, '{}',"
+            " '2026-09-01T00:00:00+00:00', 0)"
+        )
+
+    upgrade_db(path, HEAD)
+
+    with sqlite3.connect(path) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(tasks)").fetchall()}
+        fate = connection.execute("SELECT carry_choice FROM tasks WHERE id='old'").fetchone()[0]
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute("UPDATE tasks SET carry_choice='carried' WHERE id='old'")
+        connection.execute("UPDATE tasks SET carry_choice='left' WHERE id='old'")
+    assert "carry_choice" in columns
+    assert fate is None  # pre-fate rows load undecided, per spec 07 §3.3 p.3
