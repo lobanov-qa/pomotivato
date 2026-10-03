@@ -13,7 +13,7 @@ from pomotivato.core.schedule import move_slot
 from pomotivato.core.validation import validate_day_plan
 from pomotivato.infra.errors import NotFoundError
 from pomotivato.infra.repository import DayPlanRepository, TaskRepository
-from pomotivato.services.planner import AddOutcome, activate_recurring, add_task_to_plan
+from pomotivato.services.planner import AddOutcome, add_task_to_plan
 
 
 class DayPlanService:
@@ -87,16 +87,6 @@ class DayPlanService:
         await self._persist(outcome.plan)
         return outcome.plan, outcome
 
-    async def activate(self, day: date, today: date) -> tuple[DayPlan, AddOutcome]:
-        """Materialize every recurring task into the date's plan (§3.2)."""
-        if day < today:
-            msg = f"day plan for {day.isoformat()} is in the past"
-            raise ValidationError(msg)
-        plan = await self._ensure_plan(day)
-        outcome = activate_recurring(plan, await self._tasks.list_all(), day)
-        await self._persist(outcome.plan)
-        return outcome.plan, outcome
-
     async def remove_slot(self, day: date, sector: int, today: date) -> DayPlan:
         """Take one task off the day (spec 06 DF1: the week screen's ×).
 
@@ -139,7 +129,7 @@ class DayPlanService:
     async def _ensure_plan(self, day: date) -> DayPlan:
         plan = await self._plans.get_by_date(day)
         if plan is None:
-            # A missing date gets an in-memory empty plan: add/activate
+            # A missing date gets an in-memory empty plan: add
             # fill the first sector below, and _persist validates before
             # writing, so an empty row can never reach storage (core V9).
             plan = DayPlan(id=f"plan-{day.isoformat()}", date=day, slots=())

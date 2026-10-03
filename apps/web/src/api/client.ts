@@ -27,6 +27,10 @@ export interface TaskDto {
   cloned_from: string | null;
   /** DF13 (spec 06): board-only errand — no timer, no dial, no report. */
   no_timer: boolean;
+  /** E4c/ADR-0005: sprint container owner; null is the dateless shelf. */
+  sprint_id: string | null;
+  /** V34/A40: fate at the owner's closure ('left'/'moved'/null). */
+  carry_choice: string | null;
   /** DF10: completed work blocks so far (board list only) — the day math. */
   blocks_done: number | null;
   /** Author's law 23.09: TICKED days already worked (board list only) — the
@@ -245,7 +249,6 @@ export const api = {
   addTaskToPlan: (date: string, taskId: string) =>
     request<AddResultDto>("POST", `/api/day-plans/${date}/add`, { task_id: taskId }),
   /** Materialize the date's recurring tasks into its plan (spec 05 §3.2). */
-  activatePlan: (date: string) => request<AddResultDto>("POST", `/api/day-plans/${date}/activate`),
 
   listSprints: () => request<SprintDto[]>("GET", "/api/sprints"),
   createSprint: (body: {

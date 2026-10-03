@@ -74,17 +74,3 @@ async def add_task_to_day(
     return AddResultDto(
         plan=DayPlanDto.from_core(plan), added=list(outcome.added), skipped=list(outcome.skipped)
     )
-
-
-@router.post("/{plan_date}/activate", response_model=AddResultDto)
-async def activate_recurring_day(
-    plan_date: date,
-    session: DbSession,
-    clock: ClockDep,
-) -> AddResultDto:
-    """Materialize today's recurring tasks into the plan (spec 05 §3.2)."""
-    service = DayPlanService(session)
-    plan, outcome = await service.activate(plan_date, clock.now().date())
-    return AddResultDto(
-        plan=DayPlanDto.from_core(plan), added=list(outcome.added), skipped=list(outcome.skipped)
-    )

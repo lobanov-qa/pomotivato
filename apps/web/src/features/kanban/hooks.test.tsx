@@ -28,6 +28,8 @@ function task(overrides: Partial<TaskDto> = {}): TaskDto {
     benefit: null,
     cloned_from: null,
     no_timer: false,
+    sprint_id: null,
+    carry_choice: null,
     blocks_done: null,
     days_done: null,
     last_worked: null,

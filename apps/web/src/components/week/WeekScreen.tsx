@@ -2,12 +2,13 @@
  * Week screen (spec 04 §2 read-only browser + spec 05 §3.8 planning).
  * E4b-UX DF1 (author 08.09): the drag strip left — the kanban is the one
  * place cards get planned; the day panel got a × per slot (DELETE slot)
- * so anything the week holds can be taken off without dragging. Today
- * still offers "activate" for recurring tasks and ↑/↓ reorder (POST
- * slots/move). Past dates stay untouchable (⚑ Q4).
+ * so anything the week holds can be taken off without dragging. The
+ * E4c "repeat into plan" button died with its endpoint (spec 07 A11):
+ * the plan is derived from the doing column, day marks live on the card.
+ * Up/down reorder stays (POST slots/move); past dates stay untouchable.
  */
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "@/api/client";
 import type { WeekDayDto } from "@/api/types_stats";
@@ -35,7 +36,6 @@ const MAX_BAR_PX = 40;
 export function WeekScreen() {
   const [start, setStart] = useState(() => mondayOf(today()));
   const [selected, setSelected] = useState<string | null>(null);
-  const [flash, setFlash] = useState<string | null>(null);
   const client = useQueryClient();
   const { data } = useQuery({
     queryKey: ["week", start],
@@ -51,35 +51,10 @@ export function WeekScreen() {
     void client.invalidateQueries({ queryKey: ["week"] });
     void client.invalidateQueries({ queryKey: ["tasks"] });
   };
-
-  const activate = useMutation({
-    mutationFn: (date: string) => api.activatePlan(date),
-    onSuccess: (result, date) => {
-      invalidateWeek();
-      setFlash(
-        result.added.length > 0
-          ? `${shortDate(date)}: ${t("week.activate-done")}` +
-            (result.skipped.length ? ` · ${t("week.activate-skipped")}` : "")
-          : `${shortDate(date)}: ${t("week.activate-none")}`,
-      );
-    },
-  });
-
   return (
     <section className="mx-auto w-full max-w-4xl space-y-4" data-testid="week.screen">
       <header className="flex flex-wrap items-center gap-2">
         <h1 className="mr-auto text-lg font-bold">{t("week.title")}</h1>
-        {windowDates.includes(today()) && (
-          <button
-            type="button"
-            data-testid="week.activate-today"
-            onClick={() => activate.mutate(today())}
-            disabled={activate.isPending}
-            className="rounded-md border border-primary px-3 py-1 text-sm text-primary hover:bg-primary/10"
-          >
-            {t("week.activate")}
-          </button>
-        )}
         <button
           type="button"
           data-testid="week.prev"
@@ -130,15 +105,6 @@ export function WeekScreen() {
             />
           ))}
         </div>
-      )}
-
-      {(flash || activate.isError) && (
-        <p
-          data-testid="week.flash"
-          className={cn("text-xs", activate.isError ? "text-danger" : "text-muted-foreground")}
-        >
-          {activate.isError ? t("error.unknown") : flash}
-        </p>
       )}
 
       <DueSection />

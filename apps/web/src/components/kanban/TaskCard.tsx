@@ -1,6 +1,6 @@
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import type { TaskDto, TaskStatus } from "@/api/client";
 import { progressOf } from "@/features/kanban/recurrence";
 import { t } from "@/i18n/ru";
@@ -28,7 +28,6 @@ interface Props {
 
 export function TaskCard({ task, onOpen, wetHint, isFrog }: Props) {
   const drag = useDraggable({ id: task.id });
-  const listeners = drag.listeners ?? {};
   const style = { transform: CSS.Translate.toString(drag.transform) };
   const progress = progressOf(task); // DF10: "2 из 5" dots, null unless ticked
 
@@ -42,6 +41,11 @@ export function TaskCard({ task, onOpen, wetHint, isFrog }: Props) {
     <article
       ref={setRefs}
       data-testid={`task-card.root-${task.id}`}
+      // DF15 (spec 07): the whole card body is the drag handle — one thing
+      // to grab, no hidden grip affordance. activationConstraint keeps
+      // clicks (open/edit) distinct from drags (4px travel).
+      {...(drag.attributes ?? {})}
+      {...(drag.listeners ?? {})}
       style={style}
       className={cn(
         "group relative rounded-lg border bg-card p-3 pl-4 shadow-card transition-shadow",
@@ -54,19 +58,6 @@ export function TaskCard({ task, onOpen, wetHint, isFrog }: Props) {
       )}
     >
       <div className="flex items-start gap-2">
-        <button
-          type="button"
-          data-testid={`task-card.grip-${task.id}`}
-          aria-label={t("kanban.card-grip")}
-          className={cn(
-            "-ml-1 mt-0.5 shrink-0 cursor-grab touch-none rounded p-0.5 text-muted-foreground",
-            "opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100",
-          )}
-          {...listeners}
-          {...(drag.attributes ?? {})}
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
         <button
           type="button"
           data-testid={`task-card.open-${task.id}`}
