@@ -7,7 +7,9 @@
 
 import { useState } from "react";
 import type { SprintDto } from "@/api/client";
+import { sprintColor, sprintStatusKey } from "@/features/sprints/colors";
 import { useSprints } from "@/features/sprints/hooks";
+import { todayIso } from "@/features/week/dates";
 import { t } from "@/i18n/ru";
 import { cn } from "@/lib/utils";
 import { SprintModal } from "./SprintModal";
@@ -15,9 +17,11 @@ import { SprintModal } from "./SprintModal";
 interface Props {
   /** ISO dates of the visible window: the band dims the sprint's days. */
   windowDates: string[];
+  /** Row/list opener handed the sprint card (E4c PR 7, §4.1.3). */
+  onOpen?: (sprint: SprintDto) => void;
 }
 
-export function SprintBand({ windowDates }: Props) {
+export function SprintBand({ windowDates, onOpen }: Props) {
   const { active, sprints } = useSprints();
   const [modal, setModal] = useState<null | { sprint: SprintDto | null }>(null);
   // The band can also edit the newest planned sprint when none is active.
@@ -25,13 +29,16 @@ export function SprintBand({ windowDates }: Props) {
   const inWindow = shown
     ? windowDates.filter((iso) => iso >= shown.start_date && iso <= shown.end_date).length
     : 0;
+  // §4.1.1: the band wears the sprint's color (planned/completed stay gray)
+  // and writes the textual status next to the period.
+  const color = shown ? sprintColor(shown) : null;
 
   return (
     <div
       data-testid="week.sprint-band"
       className={cn(
         "flex flex-wrap items-center gap-2 rounded-card border px-3 py-1.5 text-sm",
-        active ? "border-primary/40 bg-primary/5" : "bg-card",
+        color ? cn(color.border, color.fill) : "bg-card",
       )}
     >
       {shown ? (
@@ -39,7 +46,7 @@ export function SprintBand({ windowDates }: Props) {
           <button
             type="button"
             data-testid="week.sprint-edit"
-            onClick={() => setModal({ sprint: shown })}
+            onClick={() => (onOpen ? onOpen(shown) : setModal({ sprint: shown }))}
             className="font-semibold hover:underline"
           >
             {`${t("sprint.title")} ${shown.number}`}
@@ -48,6 +55,9 @@ export function SprintBand({ windowDates }: Props) {
           <span className="text-xs tabular-nums text-muted-foreground">
             {shown.start_date} → {shown.end_date}
             {inWindow > 0 && ` · ${inWindow}`}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {t(`sprint.status-${sprintStatusKey(shown, todayIso())}` as "sprint.status-created")}
           </span>
           {shown.goal && <span className="truncate text-xs">{shown.goal}</span>}
         </>
@@ -87,7 +97,12 @@ export function SprintBand({ windowDates }: Props) {
         )}
       </div>
       {modal && (
-        <SprintModal sprint={modal.sprint} windowStart={windowDates[0]} onClose={() => setModal(null)} />
+        <SprintModal
+          sprint={modal.sprint}
+          windowStart={windowDates[0]}
+          activeSprints={sprints.filter((sp) => sp.status === "active")}
+          onClose={() => setModal(null)}
+        />
       )}
     </div>
   );

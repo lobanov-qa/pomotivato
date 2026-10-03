@@ -32,6 +32,17 @@
   --color-warning: #d97706;
   --color-danger: #dc2626;
 
+  /* sprint palettes (spec 07 §3.1): color_idx = (number - 1) % 7; these
+     seven hues never collide with the timer phases and stay in @theme
+     so dark mode keeps them as-is (they are mid-lightness by choice) */
+  --color-sprint-0: #0ea5e9; /* sky-500 */
+  --color-sprint-1: #8b5cf6; /* violet-500 */
+  --color-sprint-2: #10b981; /* emerald-500 */
+  --color-sprint-3: #f59e0b; /* amber-500 */
+  --color-sprint-4: #ec4899; /* pink-500 */
+  --color-sprint-5: #06b6d4; /* cyan-500 */
+  --color-sprint-6: #84cc16; /* lime-500 */
+
   /* kanban columns (kept muted so phase colors stay unique) */
   --color-col-backlog: #a1a1aa;
   --color-col-planned: #3b82f6;

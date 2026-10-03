@@ -40,6 +40,8 @@ import { sprintDays } from "@/features/kanban/recurrence";
 import {
   defaultScope,
   readScopeParam,
+  readTaskParam,
+  clearTaskParam,
   scopeOptions,
   withinScope,
   writeScopeParam,
@@ -82,7 +84,9 @@ export function KanbanScreen() {
   const close = useCloseTask();
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [panelId, setPanelId] = useState<string | null>(null); // DF2 card panel
+  // DF2 card panel; ?task=<id> from the sprint card deep-links straight in,
+  // the param is then dropped so closing does not resurrect the panel.
+  const [panelId, setPanelId] = useState<string | null>(readTaskParam);
   const [scopeOverride, setScopeOverride] = useState<ScopeId | undefined>(
     readScopeParam, // ?sprint=<id|none> survives reload (spec 07 §4.3)
   );
@@ -116,7 +120,17 @@ export function KanbanScreen() {
   const panelTask = panelId ? byId.get(panelId) ?? null : null;
   // Stable identity: TaskPanel's focus/Esc effect must not re-run while
   // optimistic patches re-render the screen (it would steal input focus).
-  const closePanel = useCallback(() => setPanelId(null), []);
+  function openPanel(id: string): void {
+    setPanelId(id);
+    const url = new URL(window.location.href);
+    url.searchParams.set("task", id);
+    window.history.replaceState({}, "", url);
+  }
+
+  const closePanel = useCallback(() => {
+    setPanelId(null);
+    clearTaskParam(); // the deep link is spent once the panel closes
+  }, []);
 
   const planTasks = useMemo(() => {
     const doing = tasks.filter((task) => task.status === "doing");
@@ -341,7 +355,7 @@ export function KanbanScreen() {
                     task={task}
                     wetHint={wetEnabled && needsWhenThen(task)}
                     isFrog={isFrogCard(task.id, frog?.task_id)}
-                    onOpen={setPanelId}
+                    onOpen={openPanel}
                   />
                 ))}
               </KanbanColumn>

@@ -4,7 +4,7 @@
  * server owns every number — these interfaces carry results, not rules.
  */
 
-import type { DayPlanDto, TaskType } from "./client";
+import type { DayPlanDto, TaskDto, TaskType } from "./client";
 
 export interface StatsPeriodDto {
   from: string;
@@ -130,6 +130,12 @@ export interface SprintDto {
   unfinished_count: number;
   carry_pending: number;
   is_current: boolean;
+}
+
+/** GET /api/sprints/{id} (spec 07 §6): the sprint card's own list,
+ * archived included — the archive page and the fate menu read it. */
+export interface SprintDetailDto extends SprintDto {
+  tasks: TaskDto[];
 }
 
 /** add outcome: honest plan + who got in / squeezed out (spec 05 §3.8). */

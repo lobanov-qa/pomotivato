@@ -11,10 +11,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "@/api/client";
+import type { SprintDto } from "@/api/client";
 import type { WeekDayDto } from "@/api/types_stats";
 import { DueSection } from "@/components/week/DueSection";
+import { dayPalette, sprintOfDay } from "@/features/sprints/colors";
 import { SprintBand } from "@/components/week/SprintBand";
-import { useSprintDates } from "@/features/sprints/hooks";
+import { SprintList } from "@/components/week/SprintList";
+import { useSprintDates, useSprints } from "@/features/sprints/hooks";
 import { mondayOf, shiftWeeks } from "@/features/week/dates";
 import { t } from "@/i18n/ru";
 import { cn } from "@/lib/utils";
@@ -42,6 +45,7 @@ export function WeekScreen() {
     queryFn: () => api.getWeek(start, 7),
     staleTime: 30_000, // the window is mostly history; SSE owns the live day
   });
+  const { sprints } = useSprints();
   const inSprint = useSprintDates();
 
   const selectedDay = data?.items.find((item) => item.date === selected) ?? null;
@@ -101,6 +105,7 @@ export function WeekScreen() {
               item={item}
               selected={selected === item.date}
               sprintDay={inSprint(item.date)}
+              ownerSprint={sprintOfDay(sprints, item.date)}
               onSelect={() => setSelected(item.date)}
             />
           ))}
@@ -108,6 +113,8 @@ export function WeekScreen() {
       )}
 
       <DueSection />
+
+      <SprintList />
 
       {selectedDay && (
         <DayDetail item={selectedDay} onClose={() => setSelected(null)} onChanged={invalidateWeek} />
@@ -120,13 +127,17 @@ function DayCell({
   item,
   selected,
   sprintDay,
+  ownerSprint,
   onSelect,
 }: {
   item: WeekDayDto;
   selected: boolean;
   sprintDay: boolean;
+  /** Whose sprint window covers this day (color + fill, §4.1.2). */
+  ownerSprint: SprintDto | null;
   onSelect: () => void;
 }) {
+  const color = ownerSprint ? dayPalette(ownerSprint) : null;
   const summary = item.summary;
   return (
     <button
@@ -137,7 +148,10 @@ function DayCell({
       className={cn(
         "flex h-36 flex-col rounded-card border p-1 text-left",
         selected ? "border-2 border-primary bg-card" : "bg-card hover:bg-muted/50",
-        sprintDay && !selected && "border-primary/40",
+        // the owning sprint's color wins; gray planned/completed keep the
+        // plain border, active-only coloring per sprintColor.
+        color && !selected && cn(color.border, color.fill),
+        sprintDay && !selected && !color && "border-primary/40",
       )}
     >
       <span className="text-[10px] uppercase text-muted-foreground">

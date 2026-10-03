@@ -147,7 +147,13 @@ export interface DailySummaryDto {
  * method signatures and re-exported so existing `from "./api/client"`
  * paths keep working (E3 lesson: aliases on Cyrillic paths are fragile). */
 import type { FrogDto, HintDto, RepetitionDueDto } from "./types_science";
-import type { AddResultDto, SprintDto, StatsDto, WeekDto } from "./types_stats";
+import type {
+  AddResultDto,
+  SprintDetailDto,
+  SprintDto,
+  StatsDto,
+  WeekDto,
+} from "./types_stats";
 
 export type { FrogDto, HintDto, HintKind, RepetitionDueDto } from "./types_science";
 
@@ -168,6 +174,7 @@ export type {
   StatsTotalsDto,
   StreakDto,
   SprintDto,
+  SprintDetailDto,
   AddResultDto,
   WeekDayDto,
   WeekDto,
@@ -224,7 +231,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 export const api = {
   listTasks: (status?: TaskStatus) =>
-    request<TaskDto[]>("GET", `/api/tasks${status ? `?status=${status}` : ""}`),
+    request<TaskDto[]>(`GET`, `/api/tasks${status ? `?status=${status}` : ""}`),
+  /** Board-scope list (E4c §6): by sprint, or the shelf when sprintId=null. */
+  listTasksInScope: (sprintId: string | null) =>
+    request<TaskDto[]>("GET", sprintId === null ? "/api/tasks?no_sprint=true" : `/api/tasks?sprint_id=${sprintId}`),
   createTask: (body: Partial<TaskDto> & { id: string; title: string }) =>
     request<TaskDto>("POST", "/api/tasks", body),
   patchTask: (id: string, changes: Partial<TaskDto>) =>
@@ -264,6 +274,17 @@ export const api = {
   }) => request<SprintDto>("POST", "/api/sprints", body),
   patchSprint: (id: string, changes: Partial<SprintDto>) =>
     request<SprintDto>("PATCH", `/api/sprints/${id}`, changes),
+  /** V29: wipes the sprint WITH its cards (dialog warns, spec 07 §4.2). */
+  deleteSprint: (id: string) => request<void>("DELETE", `/api/sprints/${id}`),
+  /** GET /api/sprints/{id}: sprint + its tasks incl. archived (spec 07 §6). */
+  getSprintDetail: (id: string) =>
+    request<SprintDetailDto>("GET", `/api/sprints/${id}`),
+  /** A40 fate menu (spec 07 §6): copy-to-target / to-shelf / freeze-in-place. */
+  carryChoice: (taskId: string, body: { target_sprint_id?: string | null; leave?: boolean }) =>
+    request<TaskDto>("POST", `/api/tasks/${taskId}/carry-choice`, body),
+  /** «Оставить все как есть»: freezes every undecided card of the sprint. */
+  carryChoiceAll: (sprintId: string) =>
+    request<{ decided: number }>("POST", `/api/sprints/${sprintId}/carry-choice-all`),
 
   startSession: (body: { day_plan_id: string; settings?: Partial<SessionSettingsDto> }) =>
     request<SessionDto>("POST", "/api/sessions", body),
