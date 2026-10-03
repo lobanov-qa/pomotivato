@@ -5,6 +5,7 @@ import { KanbanScreen } from "./components/kanban/KanbanScreen";
 import { SettingsScreen } from "./components/settings/SettingsScreen";
 import { StatsScreen } from "./components/stats/StatsScreen";
 import { ThemeSync } from "./features/settings/hooks";
+import { ArchiveScreen } from "./components/week/ArchiveScreen";
 import { WeekScreen } from "./components/week/WeekScreen";
 
 /**
@@ -23,6 +24,7 @@ const router = createBrowserRouter([
       { path: "settings", element: <SettingsScreen /> },
       { path: "stats", element: <StatsScreen /> },
       { path: "week", element: <WeekScreen /> },
+      { path: "archive", element: <ArchiveScreen /> },
     ],
   },
 ]);

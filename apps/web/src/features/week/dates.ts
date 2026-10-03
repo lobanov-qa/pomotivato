@@ -20,3 +20,8 @@ export function shiftWeeks(iso: string, weeks: number): string {
     .toISOString()
     .slice(0, 10);
 }
+
+/** Local calendar today as ISO (the board's "today" everywhere in the UI). */
+export function todayIso(): string {
+  return new Date().toLocaleDateString("en-CA");
+}

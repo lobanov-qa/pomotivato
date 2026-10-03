@@ -11,15 +11,20 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import {
   useCreateSprint,
+  useDeleteSprint,
   usePatchSprint,
+  useSprintDetail,
   type SprintDraft,
 } from "@/features/sprints/hooks";
 import { t } from "@/i18n/ru";
+import { SprintTasksBlock } from "./SprintTasksBlock";
 
 interface Props {
   /** null -> create mode. */
   sprint: SprintDto | null;
   windowStart: string;
+  /** Active sprints for the fate menu (A13: copies only into activated). */
+  activeSprints?: SprintDto[];
   onClose: () => void;
 }
 
@@ -29,9 +34,28 @@ function addDays(iso: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-export function SprintModal({ sprint, windowStart, onClose }: Props) {
+export function SprintModal({ sprint, windowStart, activeSprints = [], onClose }: Props) {
   const create = useCreateSprint();
   const patch = usePatchSprint();
+  const del = useDeleteSprint();
+  // The card lists its tasks (spec 07 §4.1.4); the list endpoint omits them.
+  const detail = useSprintDetail(sprint?.id ?? null);
+  const tasks = detail.data?.tasks ?? [];
+  // completed -> read-only texts (period frozen by the server too, §4.1.4).
+  const frozen = sprint?.status === "completed";
+  const active = sprint?.status === "active";
+  // §4.2: delete warns about the cards it wipes; the fate menu lives in the
+  // tasks block right here, so the dialog has a way out before deleting.
+  const [askDelete, setAskDelete] = useState(false);
+  async function confirmDelete(): Promise<void> {
+    if (!sprint) return;
+    try {
+      await del.mutateAsync(sprint.id);
+      onClose();
+    } catch {
+      /* the error line below shows the server text */
+    }
+  }
   const [draft, setDraft] = useState<SprintDraft>(() => ({
     name: sprint?.name ?? "",
     goal: sprint?.goal ?? "",
@@ -39,7 +63,7 @@ export function SprintModal({ sprint, windowStart, onClose }: Props) {
     start_date: sprint?.start_date ?? windowStart,
     end_date: sprint?.end_date ?? addDays(windowStart, 6),
   }));
-  const busy = create.isPending || patch.isPending;
+  const busy = create.isPending || patch.isPending || del.isPending;
 
   const invalid = draft.start_date > draft.end_date;
   const tooLong = !invalid && daysBetween(draft.start_date, draft.end_date) > 14;
@@ -71,8 +95,7 @@ export function SprintModal({ sprint, windowStart, onClose }: Props) {
     }
   }
 
-  const serverError =
-    create.error ?? patch.error ?? null;
+  const serverError = create.error ?? patch.error ?? del.error ?? null;
 
   return (
     <div
@@ -96,6 +119,7 @@ export function SprintModal({ sprint, windowStart, onClose }: Props) {
             data-testid="sprint.form-name"
             placeholder={t("sprint.name-placeholder")}
             maxLength={200}
+            disabled={frozen}
             value={draft.name ?? ""}
             onChange={(e) => setDraft({ ...draft, name: e.target.value })}
           />
@@ -103,6 +127,7 @@ export function SprintModal({ sprint, windowStart, onClose }: Props) {
             data-testid="sprint.form-goal"
             placeholder={t("sprint.goal-placeholder")}
             maxLength={200}
+            disabled={frozen}
             value={draft.goal ?? ""}
             onChange={(e) => setDraft({ ...draft, goal: e.target.value })}
           />
@@ -110,6 +135,7 @@ export function SprintModal({ sprint, windowStart, onClose }: Props) {
             data-testid="sprint.form-done"
             placeholder={t("sprint.done-placeholder")}
             maxLength={200}
+            disabled={frozen}
             value={draft.done_criteria ?? ""}
             onChange={(e) => setDraft({ ...draft, done_criteria: e.target.value })}
           />
@@ -119,6 +145,7 @@ export function SprintModal({ sprint, windowStart, onClose }: Props) {
               id="sprint-start"
               type="date"
               data-testid="sprint.form-start"
+              disabled={frozen || active}
               value={draft.start_date}
               onChange={(e) => setDraft({ ...draft, start_date: e.target.value })}
             />
@@ -127,6 +154,7 @@ export function SprintModal({ sprint, windowStart, onClose }: Props) {
               id="sprint-end"
               type="date"
               data-testid="sprint.form-end"
+              disabled={frozen || active}
               value={draft.end_date}
               onChange={(e) => setDraft({ ...draft, end_date: e.target.value })}
             />
@@ -137,6 +165,7 @@ export function SprintModal({ sprint, windowStart, onClose }: Props) {
                 key={span}
                 type="button"
                 data-testid={`sprint.preset-${span + 1}`}
+                disabled={frozen || active}
                 onClick={() => setDraft({ ...draft, end_date: addDays(draft.start_date, span) })}
                 className="rounded-md border px-2 py-0.5 text-xs hover:bg-muted"
               >
@@ -154,10 +183,33 @@ export function SprintModal({ sprint, windowStart, onClose }: Props) {
             </p>
           ) : null}
         </div>
+        {sprint ? (
+          <div className="mt-3 border-t pt-3" data-testid="sprint.tasks-zone">
+            <SprintTasksBlock
+              sprint={detail.data ?? sprint}
+              tasks={tasks}
+              activeSprints={activeSprints}
+            />
+            {frozen ? <p className="mt-1 text-xs text-muted-foreground">{t("sprint.readonly")}</p> : null}
+          </div>
+        ) : null}
+        {askDelete ? (
+          <div className="mt-4 flex flex-col gap-2" data-testid="sprint.delete-dialog">
+            <p className="text-xs">{t("sprint.delete-warning", "ru", { count: tasks.length })}</p>
+            <div className="flex gap-2">
+              <Button variant="outline" data-testid="sprint.delete-confirm" onClick={() => void confirmDelete()}>
+                {t("sprint.delete-confirm")}
+              </Button>
+              <Button variant="ghost" data-testid="sprint.delete-cancel" onClick={() => setAskDelete(false)}>
+                {t("common.cancel")}
+              </Button>
+            </div>
+          </div>
+        ) : (
         <div className="mt-4 flex gap-2">
           <Button
             data-testid="sprint.save"
-            disabled={busy || invalid || tooLong}
+            disabled={busy || invalid || tooLong || frozen}
             onClick={() => void save()}
           >
             {t("settings.save")}
@@ -182,10 +234,21 @@ export function SprintModal({ sprint, windowStart, onClose }: Props) {
               {t("sprint.complete")}
             </Button>
           )}
+          {sprint ? (
+            <Button
+              variant="ghost"
+              data-testid="sprint.delete"
+              disabled={busy}
+              onClick={() => setAskDelete(true)}
+            >
+              {t("sprint.delete")}
+            </Button>
+          ) : null}
           <Button variant="ghost" data-testid="sprint.cancel" onClick={onClose}>
             {t("common.cancel")}
           </Button>
         </div>
+        )}
       </section>
     </div>
   );

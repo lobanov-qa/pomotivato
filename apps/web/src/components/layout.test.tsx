@@ -41,7 +41,7 @@ describe("app shell", () => {
     expect(screen.getByTestId("nav.tasks-link")).toHaveTextContent("Задачи");
     expect(screen.getByTestId("nav.focus-link")).toHaveTextContent("Фокус");
     expect(screen.getByTestId("nav.stats-link")).toHaveTextContent("Статистика");
-    expect(screen.getByTestId("nav.week-link")).toHaveTextContent("Неделя");
+    expect(screen.getByTestId("nav.week-link")).toHaveTextContent("Спринты");
     expect(screen.getByTestId("nav.settings-link")).toHaveTextContent("Настройки");
   });
 

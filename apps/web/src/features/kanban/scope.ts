@@ -75,3 +75,14 @@ export function defaultScope(
   );
   return current?.id ?? null;
 }
+
+/** Deep link from the sprint card (E4c §4.1.4): ?task=<id> opens the panel. */
+export function readTaskParam(): string | null {
+  return new URLSearchParams(window.location.search).get("task");
+}
+
+export function clearTaskParam(): void {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("task");
+  window.history.replaceState({}, "", url);
+}
