@@ -4,7 +4,11 @@ T16/T17 live in the core FSM (review never blocks, one per segment); this
 service adds persistence and, for STUDY tasks, advances the review queue
 via core `advance_repetition` (intervals owned by E1, not re-invented).
 DF9–11 (spec 06): scoring a closed block is the day's verdict — the card
-then moves itself (planned with progress left, or done when not).
+then moves itself. E4c rewrites the trigger as V22 (spec 07 §5.1): the
+walk fires only when TODAY's blocks are exhausted — a two-sector card
+that scored one block stays in work (the author's 24.09 bug (1)); the
+destination follows the tick map (future -> planned, holes -> planned via
+V31, everything worked -> done; shelf cards always close).
 """
 
 from __future__ import annotations
@@ -14,11 +18,12 @@ from dataclasses import replace
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pomotivato.core.clock import Clock
+from pomotivato.core.days import walk_after_day
 from pomotivato.core.errors import InvalidReviewError
 from pomotivato.core.models import RepetitionState, Review, TaskStatus, TaskType
 from pomotivato.core.science import advance_repetition
 from pomotivato.infra.errors import NotFoundError
-from pomotivato.infra.repository import TaskRepository
+from pomotivato.infra.repository import DayPlanRepository, TaskRepository
 from pomotivato.infra.repository_sessions import (
     RepetitionRepository,
     ReviewRepository,
@@ -42,6 +47,7 @@ class ReviewService:
         self._segments = SegmentRepository(session)
         self._repetitions = RepetitionRepository(session)
         self._tasks = TaskRepository(session)
+        self._day_plans = DayPlanRepository(session)
 
     async def submit(
         self,
@@ -73,14 +79,16 @@ class ReviewService:
         return review
 
     async def _auto_move_after_review(self, task_id: str | None) -> None:
-        """DF9–11 (spec 06): the score is the day's verdict, no button for it.
+        """V22 (spec 07 §5.1): the day-blocks come FIRST, then the tick map.
 
-        A scored-off timer card with future repeat days returns to PLANNED
-        (its "2 of 5" progress is the past segments themselves); a single
-        run or the last tick closes as DONE. doing->planned and doing->done
-        are both legal V7 transitions — the machine already allowed what
-        the author asked for; only the trigger was missing. Errands (no
-        timer) never run the FSM, so they never land here.
+        DF9-11 made the score the day's verdict; E4c sharpened it into
+        core.walk_after_day: a card whose plan-day holds two sectors and
+        which scored one of them STAYS in «В работе» (author's 24.09 bug),
+        and a card done for today returns to planned while future ticks
+        remain, stays planned while any tick (even a past one) is unspent
+        (V31), and only then closes. A shelf card (no sprint) closes once
+        its day's blocks are gone (д). The score None (skip, A39) walks
+        exactly like a real one.
         """
         if task_id is None:
             return
@@ -88,8 +96,17 @@ class ReviewService:
         if task is None or task.status is not TaskStatus.DOING:
             return
         today = self._clock.now().date()
-        nxt = TaskStatus.DONE if not task.repeat_days_ahead(today) else TaskStatus.PLANNED
-        await self._tasks.put(replace(task, status=nxt))
+        plan = await self._day_plans.get_by_date(today)
+        day_blocks = (
+            sum(1 for slot in plan.slots if slot.task_id == task_id) if plan is not None else 0
+        )
+        done_today = (await self._segments.work_blocks_on(today)).get(task_id, 0)
+        worked = (await self._segments.worked_days_by_task()).get(task_id, frozenset())
+        nxt = walk_after_day(
+            task, today, day_blocks=day_blocks, blocks_done_today=done_today, worked_days=worked
+        )
+        if nxt is not None:
+            await self._tasks.put(replace(task, status=nxt))
 
     async def _advance_repetition(self, task_id: str | None) -> None:
         if task_id is None:

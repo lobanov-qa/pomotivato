@@ -31,6 +31,9 @@ function task(overrides: Partial<TaskDto> = {}): TaskDto {
     blocks_done: null,
     days_done: null,
     last_worked: null,
+    days_missed: null,
+    days_left: null,
+    closeable: null,
     created_at: `${new Date().toLocaleDateString("en-CA")}T09:00:00+00:00`,
     ...overrides,
   };
@@ -237,14 +240,19 @@ describe("KanbanScreen", () => {
     // Stateful mock: PATCH mutates the live list and GET returns it — the
     // second tick must build on the card the server already saved.
     const live = BOARD.map((t) => ({ ...t }));
+    // E4c PR 4: the row gained the V21 guard (past days are not tickable),
+    // so the band must cover the real today — window anchored to now.
+    const now = new Date().toLocaleDateString("en-CA");
+    const dayAfter = new Date(Date.now() + 86_400_000).toLocaleDateString("en-CA");
+    const dayAhead = new Date(Date.now() + 2 * 86_400_000).toLocaleDateString("en-CA");
     const sprint = {
       id: "s-1",
       number: 1,
       name: "w37",
       goal: null,
       done_criteria: null,
-      start_date: "2026-09-07",
-      end_date: "2026-09-13",
+      start_date: now,
+      end_date: dayAhead,
       status: "active",
     };
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -269,14 +277,11 @@ describe("KanbanScreen", () => {
     renderScreen();
 
     await user.click(await screen.findByTestId("task-card.edit-a"));
-    await user.click(await screen.findByTestId("task-panel.day-a-2026-09-09"));
+    await user.click(await screen.findByTestId(`task-panel.day-a-${now}`));
     await waitFor(() =>
-      expect(screen.getByTestId("task-panel.day-a-2026-09-09")).toHaveAttribute(
-        "aria-pressed",
-        "true",
-      )
+      expect(screen.getByTestId(`task-panel.day-a-${now}`)).toHaveAttribute("aria-pressed", "true"),
     );
-    await user.click(screen.getByTestId("task-panel.day-a-2026-09-11"));
+    await user.click(screen.getByTestId(`task-panel.day-a-${dayAfter}`));
 
     await waitFor(() => {
       const patches = fetchMock.mock.calls
@@ -284,11 +289,76 @@ describe("KanbanScreen", () => {
           ([url, init]) => url === "/api/tasks/a" && (init as RequestInit)?.method === "PATCH",
         )
         .map(([, init]) => JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>);
-      expect(patches.at(-1)?.recurrence).toEqual({
-        kind: "on_dates",
-        days: ["2026-09-09", "2026-09-11"],
-      });
+      expect(patches.at(-1)?.recurrence).toEqual({ kind: "on_dates", days: [now, dayAfter] });
     });
+  });
+
+  it("panel shows the §4.7 state line and close-card POSTs /close (E4c PR 4)", async () => {
+    const user = userEvent.setup();
+    const now = new Date().toLocaleDateString("en-CA");
+    const yesterday = new Date(Date.now() - 86_400_000).toLocaleDateString("en-CA");
+    const live: TaskDto[] = [
+      task({
+        id: "m",
+        title: "Missed hole",
+        recurrence: { kind: "on_dates", days: [yesterday, now] },
+        days_missed: [yesterday],
+      }),
+    ];
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = String(init?.method ?? "GET").toUpperCase();
+      if (url === "/api/tasks" && method === "GET") return jsonResponse(200, live);
+      if (url === "/api/tasks/m" && method === "PATCH") {
+        Object.assign(live[0], JSON.parse(String(init?.body)) as object);
+        return jsonResponse(200, live[0]);
+      }
+      if (url === "/api/tasks/m/close" && method === "POST") {
+        // the V31 refusal travels as 409 (a missed tick still blocks)
+        return jsonResponse(409, { detail: { code: "conflict", message: "missed day" } });
+      }
+      if (url.startsWith("/api/day-plans/")) {
+        return jsonResponse(200, { id: "p", date: now, slots: [] });
+      }
+      if (url === "/api/frog") return jsonResponse(200, { task_id: null });
+      if (url === "/api/settings") return jsonResponse(200, SETTINGS_ON);
+      if (url === "/api/sprints") return jsonResponse(200, []);
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    renderScreen();
+
+    await user.click(await screen.findByTestId("task-card.edit-m"));
+    const state = await screen.findByTestId("task-panel.state-m");
+    // dd.MM of the missed day is named, and the block explanation is there.
+    expect(state.textContent).toContain(`${yesterday.slice(8)}.${yesterday.slice(5, 7)}`);
+    expect(state.textContent).toContain("Пропущен день");
+    // V32 close is not offered while a hole remains.
+    expect(screen.queryByTestId("task-panel.close-card-m")).not.toBeInTheDocument();
+
+    // Server-side the author works the day: the hole closes, the card becomes
+    // closeable. A title PATCH drives invalidateBoard -> a fresh GET (the
+    // TanStack cache never refetches on its own, lesson #46) and the panel
+    // re-renders from the new DTO.
+    Object.assign(live[0], {
+      days_missed: [],
+      days_left: [],
+      closeable: true,
+      recurrence: { kind: "on_dates", days: [yesterday] },
+      days_done: 1,
+    });
+    await user.clear(screen.getByTestId("task-panel.title-m"));
+    await user.type(screen.getByTestId("task-panel.title-m"), "Hole healed");
+
+    const button = await screen.findByTestId("task-panel.close-card-m");
+    await user.click(button);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("kanban.conflict-toast")).toHaveTextContent("Закрыть нельзя"),
+    );
+    const closed = fetchMock.mock.calls.some(
+      ([url, init]) => url === "/api/tasks/m/close" && (init as RequestInit)?.method === "POST",
+    );
+    expect(closed).toBe(true);
   });
 
   it("hides last week's done cards under 'This week' and brings them back (DF3-filter)", async () => {

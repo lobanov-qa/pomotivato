@@ -226,6 +226,39 @@ class SegmentRepository:
         rows = await self._session.execute(stmt.group_by(SegmentRow.task_id))
         return {task_id: started[:10] for task_id, started in rows.all() if task_id and started}
 
+    async def work_blocks_on(self, day: date) -> dict[str, int]:
+        """Completed WORK blocks per task on ONE date (V22 day-blocks).
+
+        The day-close walk compares this count with the card's sectors in
+        the day plan: two sectors worked means two reviews before the card
+        may leave the dial (the author's 24.09 bug (1)).
+        """
+        stmt = (
+            select(SegmentRow.task_id, func.count())
+            .where(
+                SegmentRow.phase == SegmentPhase.WORK.value,
+                SegmentRow.status == SegmentStatus.COMPLETED.value,
+                SegmentRow.task_id.is_not(None),
+                func.substr(SegmentRow.started_at, 1, 10) == day.isoformat(),
+            )
+            .group_by(SegmentRow.task_id)
+        )
+        rows = await self._session.execute(stmt)
+        return {task_id: count for task_id, count in rows.all() if task_id}
+
+    async def any_completed_work(self, task_id: str) -> bool:
+        """Did this card ever finish a WORK block? (V32 close precondition)."""
+        stmt = (
+            select(SegmentRow.id)
+            .where(
+                SegmentRow.task_id == task_id,
+                SegmentRow.phase == SegmentPhase.WORK.value,
+                SegmentRow.status == SegmentStatus.COMPLETED.value,
+            )
+            .limit(1)
+        )
+        return await self._session.scalar(stmt) is not None
+
 
 class ReviewRepository:
     """Persistence for the reviews table (one review per segment)."""

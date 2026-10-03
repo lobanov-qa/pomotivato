@@ -13,8 +13,28 @@ from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from pomotivato.core.errors import SprintMembershipError, StatusTransitionError, ValidationError
-from pomotivato.core.models import CarryChoice, Once, SprintStatus, Task, TaskStatus, TaskType
+from pomotivato.core.clock import Clock
+from pomotivato.core.days import (
+    close_eligible,
+    fold_stale_card,
+    missed_ticks,
+    tick_days,
+    validate_ticks_not_retrospective,
+)
+from pomotivato.core.errors import (
+    SprintMembershipError,
+    StatusTransitionError,
+    ValidationError,
+)
+from pomotivato.core.models import (
+    CarryChoice,
+    Once,
+    OnDates,
+    SprintStatus,
+    Task,
+    TaskStatus,
+    TaskType,
+)
 from pomotivato.core.validation import (
     validate_deadline_realism,
     validate_planning_ready,
@@ -24,6 +44,7 @@ from pomotivato.core.validation import (
 )
 from pomotivato.infra.errors import ConflictError, NotFoundError
 from pomotivato.infra.repository import DayPlanRepository, SprintRepository, TaskRepository
+from pomotivato.infra.repository_sessions import SegmentRepository, SessionRepository
 from pomotivato.services.settings_service import SettingsService
 
 # Fields PATCH may touch; everything else is identity or derived.
@@ -50,14 +71,24 @@ _PATCHABLE_FIELDS = frozenset(
 
 
 class TaskService:
-    """Create, read, patch, transition and delete task cards."""
+    """Create, read, patch, transition and delete task cards.
 
-    def __init__(self, session: AsyncSession) -> None:
+    The injected clock owns "today": ticks, folds and sprint windows are all
+    day-relative rules (spec 07 §5), never wall-clock accidents.
+    """
+
+    def __init__(self, session: AsyncSession, clock: Clock) -> None:
         self._session = session
         self._tasks = TaskRepository(session)
         self._day_plans = DayPlanRepository(session)
         self._sprints = SprintRepository(session)
+        self._sessions = SessionRepository(session)
+        self._segments = SegmentRepository(session)
         self._settings = SettingsService(session)
+        self._clock = clock
+
+    def _today(self) -> date:
+        return self._clock.now().date()
 
     async def _require_container(self, task: Task) -> None:
         """V18/V28/V19-membership (spec 07 §5): check the card against its box.
@@ -78,9 +109,15 @@ class TaskService:
         except SprintMembershipError as err:
             raise ConflictError(str(err)) from err
 
+    async def _worked_days(self, task_id: str) -> frozenset[date]:
+        scan = await self._segments.worked_days_by_task()
+        return scan.get(task_id, frozenset())
+
     async def create(self, task: Task) -> Task:
         validate_task(task)
         validate_deadline_realism(task)
+        # V21 rides creation too: a card is born with today or the future.
+        validate_ticks_not_retrospective(Once(), task.recurrence, self._today())
         if await self._tasks.get(task.id) is not None:
             msg = f"task {task.id!r} already exists"
             raise ConflictError(msg)
@@ -126,6 +163,12 @@ class TaskService:
         updated = replace(task, **changes)
         validate_task(updated)
         validate_deadline_realism(updated)
+        if "recurrence" in changes:
+            # V21 (spec 07 §5): a mark the card did not carry before may not
+            # land in the past — existing history keeps its old ticks. V21 is
+            # a malformed-request rule (the spec's ValidationError column),
+            # so the core error rides the 422 envelope, not the 409 one.
+            validate_ticks_not_retrospective(task.recurrence, updated.recurrence, self._today())
         if updated.parent_id is not None and updated.parent_id != task_id:
             if await self._tasks.get(updated.parent_id) is None:
                 msg = f"parent task {updated.parent_id!r} does not exist"
@@ -149,7 +192,15 @@ class TaskService:
         if new_status is TaskStatus.PLANNED:
             require = await self._settings.require_science_fields()
             validate_planning_ready(task, require)
+        if new_status is TaskStatus.DONE and task.status is not TaskStatus.DONE:
+            # V31 (spec 07): neither a future tick nor a missed one lets a
+            # sprint card into «Готово» by drag — the walk after the blocks
+            # does that, with the same checks.
+            await self._require_done_clean(task)
         if new_status is TaskStatus.DOING and task.status is not TaskStatus.DOING:
+            # V27 (A23): "В работе" is a card of today — its sprint must
+            # cover the date (the shelf has no dates and is always allowed).
+            await self._require_covers_today(task)
             # Funnel law: "В работе" == today == the dial; the capacity is
             # a server-side gate so no client (or second window) overflows.
             # DF13: no-timer errands don't consume the dial — free to carry.
@@ -160,9 +211,107 @@ class TaskService:
                 msg = f"only {limit} tasks fit in work today"
                 raise ConflictError(msg)
         updated = replace(task, status=new_status)
+        if new_status is TaskStatus.DOING:
+            # A28: entering work on an unmarked day marks it — the plan and
+            # the fact stay honest, the day can later go missed the normal way.
+            updated = self._ensure_today_tick(updated)
         await self._tasks.put(updated)
         await self._session.flush()
         return updated
+
+    async def _require_done_clean(self, task: Task) -> None:
+        """V31 (spec 07): a sprint card with a hole never reaches «Готово».
+
+        Both kinds of hole block the drag: a tick still ahead (the days
+        have to be worked) and a missed tick in the past (S1: remove the
+        mark or work the day — the card waits for the decision).
+        """
+        if task.sprint_id is None:
+            return
+        today = self._today()
+        worked = await self._worked_days(task.id)
+        ahead = sorted(day for day in tick_days(task) if day > today)
+        if ahead:
+            msg = f"card still has planned days ahead: {ahead[0].isoformat()}"
+            raise ConflictError(msg)
+        missed = missed_ticks(task, today, worked)
+        if missed:
+            msg = f"card has a missed day: {missed[0].isoformat()}"
+            raise ConflictError(msg)
+
+    async def close(self, task_id: str) -> Task:
+        """V32/A35 (spec 07): close a card whose dates ran out, no timer rerun.
+
+        The user confirms through the dialog; the endpoint re-checks the
+        same conditions the hint offers them by (a completed block exists,
+        no future and no unworked ticks remain) so a stale client cannot
+        close a card that gained days in another window.
+        """
+        task = await self.get(task_id)
+        if task.status is TaskStatus.DONE:
+            return task
+        today = self._today()
+        worked = await self._worked_days(task.id)
+        if not close_eligible(task, today, worked):
+            msg = "card is not closeable: work exists, dates ahead or ticks unspent"
+            raise ConflictError(msg)
+        closed = replace(task, status=TaskStatus.DONE)
+        await self._tasks.put(closed)
+        await self._session.flush()
+        return closed
+
+    async def fold_yesterday(self) -> tuple[Task, ...]:
+        """V30+V33 (spec 07 §5.7): the lazy day fold, first read of a new day.
+
+        A card left in DOING without sectors in today's plan goes back to
+        PLANNED (or DONE when every tick was worked). V33: cards of a live
+        session — including the completed-but-unreviewed tail that keeps
+        the review window open — are never folded; their blocks belong to
+        the day they started. no_timer errands are off the dial and by
+        definition have no sectors, folding them would be a lie.
+        """
+        today = self._today()
+        plan = await self._day_plans.get_by_date(today)
+        sectors = {slot.task_id for slot in plan.slots} if plan else set()
+        live_tasks = await self._live_session_task_ids()
+        worked_scan = await self._segments.worked_days_by_task()
+        folded: list[Task] = []
+        for task in await self._tasks.list(status=TaskStatus.DOING):
+            if task.no_timer or task.id in sectors or task.id in live_tasks:
+                continue
+            nxt = fold_stale_card(task, today, worked_scan.get(task.id, frozenset()))
+            if nxt is not None and nxt is not task.status:
+                moved = replace(task, status=nxt)
+                await self._tasks.put(moved)
+                folded.append(moved)
+        if folded:
+            await self._session.flush()
+        return tuple(folded)
+
+    async def _live_session_task_ids(self) -> frozenset[str]:
+        """Task ids of RUNNING/PAUSED rows (V33's shield)."""
+        ids: set[str] = set()
+        for stored in await self._sessions.list_live():
+            if stored.slots:
+                ids.update(slot.task_id for slot in stored.slots)
+        return frozenset(ids)
+
+    async def _require_covers_today(self, task: Task) -> None:
+        if task.sprint_id is None:
+            return
+        sprint = await self._sprints.get(task.sprint_id)
+        if sprint is None or not sprint.covers(self._today()):
+            msg = "move the card to the sprint that covers today, or to no sprint"
+            raise ConflictError(msg)
+
+    def _ensure_today_tick(self, task: Task) -> Task:
+        today = self._today()
+        if task.no_timer or task.sprint_id is None:
+            return task
+        if today in tick_days(task):
+            return task
+        marked = OnDates(frozenset(tick_days(task) | {today}))
+        return replace(task, recurrence=marked)
 
     async def clone(self, task_id: str, clone_id: str) -> Task:
         """Duplicate a finished card back into the backlog (spec 06 DF12).

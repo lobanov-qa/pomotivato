@@ -13,6 +13,7 @@ import type { TaskDto, TaskType } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import { t } from "@/i18n/ru";
 import { cn } from "@/lib/utils";
+import { cardHint, dayTickable, formatCardHint } from "@/features/kanban/dayHints";
 import { isTicked, toggleDay } from "@/features/kanban/recurrence";
 import {
   QUADRANT_KEY,
@@ -27,9 +28,13 @@ interface Props {
   parents: TaskDto[];
   /** DF8: the active sprint's days (iso + RU short label) for the tick row. */
   sprintDays: { iso: string; label: string }[];
+  /** V21 UI half: past days may not gain a NEW mark (server repeats it). */
+  today: string;
   onChange: (id: string, changes: Partial<TaskDto>) => void;
   onDelete: (id: string) => void;
   onClone: (id: string) => void;
+  /** V32/A35: "Перевести в «Готово»" — POST /close, the server re-checks. */
+  onCloseCard: (id: string) => void;
   onClose: () => void;
 }
 
@@ -37,13 +42,17 @@ export function TaskPanel({
   task,
   parents,
   sprintDays,
+  today,
   onChange,
   onDelete,
   onClone,
+  onCloseCard,
   onClose,
 }: Props) {
   const [scienceOpen, setScienceOpen] = useState(true);
   const panelRef = useRef<HTMLDivElement>(null);
+  const hint = cardHint(task);
+  const hintLine = hint ? formatCardHint(task, hint) : null;
 
   useEffect(() => {
     function onKey(event: KeyboardEvent): void {
@@ -55,6 +64,10 @@ export function TaskPanel({
   }, [onClose]);
 
   const set = (changes: Partial<TaskDto>) => onChange(task.id, changes);
+
+  function toggleTick(iso: string): void {
+    set({ recurrence: toggleDay(task.recurrence, iso) });
+  }
 
   return (
     <div
@@ -172,6 +185,30 @@ export function TaskPanel({
           {t("kanban.field-no-timer")}
         </label>
 
+        {/* E4c §4.7: the card explains its own state — why it is not in
+            «Готово», which days remain, where the hole is. Numbers are the
+            server's (the board scan), this block only picks the line. */}
+        {hintLine && (
+          <p
+            className="rounded-md bg-muted/60 px-3 py-2 text-xs leading-relaxed"
+            data-testid={`task-panel.state-${task.id}`}
+          >
+            {t(hintLine.key, "ru", hintLine.params)}
+            {hintLine.daysText && `: ${hintLine.daysText}`}
+            {hint?.kind === "missed" && ` — ${t("task-panel.state-missed-blocks")}`}
+            {hint?.closeable && (
+              <button
+                type="button"
+                className="ml-2 rounded-md border px-2 py-0.5 font-medium hover:bg-muted"
+                data-testid={`task-panel.close-card-${task.id}`}
+                onClick={() => onCloseCard(task.id)}
+              >
+                {t("task-panel.close-card")}
+              </button>
+            )}
+          </p>
+        )}
+
         {/* DF8 (spec 06): tick the sprint days this card repeats on. */}
         <div className="flex flex-col gap-1">
           <span className="text-xs text-muted-foreground">
@@ -180,25 +217,32 @@ export function TaskPanel({
               : t("kanban.field-repeat-days-no-sprint")}
           </span>
           <div className="flex flex-wrap gap-1" data-testid={`task-panel.days-${task.id}`}>
-            {sprintDays.map(({ iso, label }) => (
-              <button
-                key={iso}
-                type="button"
-                disabled={task.no_timer}
-                aria-pressed={isTicked(task.recurrence, iso)}
-                data-testid={`task-panel.day-${task.id}-${iso}`}
-                onClick={() => set({ recurrence: toggleDay(task.recurrence, iso) })}
-                className={cn(
-                  "rounded-md border px-2 py-1 text-xs transition-colors",
-                  isTicked(task.recurrence, iso)
-                    ? "border-primary bg-primary/10 font-medium text-primary"
-                    : "hover:bg-muted",
-                  task.no_timer && "pointer-events-none opacity-40",
-                )}
-              >
-                {label}
-              </button>
-            ))}
+            {sprintDays.map(({ iso, label }) => {
+              const ticked = isTicked(task.recurrence, iso);
+              // V21 UI half: past days keep existing marks but never gain
+              // new ones — the server answers the same rule with 422.
+              const dead = !dayTickable(iso, today, ticked);
+              return (
+                <button
+                  key={iso}
+                  type="button"
+                  disabled={task.no_timer || dead}
+                  aria-pressed={ticked}
+                  title={dead ? t("task-panel.day-past-blocked") : undefined}
+                  data-testid={`task-panel.day-${task.id}-${iso}`}
+                  onClick={() => toggleTick(iso)}
+                  className={cn(
+                    "rounded-md border px-2 py-1 text-xs transition-colors",
+                    ticked
+                      ? "border-primary bg-primary/10 font-medium text-primary"
+                      : "hover:bg-muted",
+                    (task.no_timer || dead) && "pointer-events-none opacity-40",
+                  )}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
         </div>
 

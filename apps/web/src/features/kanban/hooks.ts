@@ -97,3 +97,12 @@ export function useCloneTask() {
     onSettled: () => invalidateBoard(client),
   });
 }
+
+/** V32/A35 (E4c PR 4): close a card whose dates ran out, no timer rerun. */
+export function useCloseTask() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.closeTask(id),
+    onSettled: () => invalidateBoard(client),
+  });
+}

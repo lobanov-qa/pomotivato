@@ -338,13 +338,20 @@ def test_commands_404_when_session_never_existed(http_session):
 
 @pytest.mark.api
 def test_scored_block_with_future_ticks_returns_card_to_planned(http_session):
-    """DF11: after scoring, a recurring card walks itself back to planned."""
+    """V22(б) (spec 07): a SPRINT card done for today walks back to planned
+    while a future tick remains (E4c: ticks are a sprint-card property)."""
     client, clock = http_session
+    sprint = client.post(
+        "/api/sprints",
+        json={"start_date": DEFAULT_MOMENT.date().isoformat(), "end_date": "2026-09-10"},
+    ).json()["id"]
+    client.patch(f"/api/sprints/{sprint}", json={"status": "active"})
     client.post(
         "/api/tasks",
         json={
             "id": "t-loop",
             "title": "English",
+            "sprint_id": sprint,
             "recurrence": {
                 "kind": "on_dates",
                 "days": [
@@ -370,6 +377,38 @@ def test_scored_block_with_future_ticks_returns_card_to_planned(http_session):
     task = client.get("/api/tasks/t-loop").json()
 
     assert task["status"] == "planned"  # not done: a tick lies ahead (day +2)
+
+
+@pytest.mark.api
+def test_shelf_card_closes_after_the_day_blocks_even_with_ticks(http_session):
+    """V22(д)/A6: a card WITHOUT a sprint closes when the day's blocks are
+    scored — tick marks are a sprint-card property (A8); a shelf card left
+    with legacy ticks must not haunt the «В работе» column forever."""
+    client, clock = http_session
+    client.post(
+        "/api/tasks",
+        json={
+            "id": "t-shelf",
+            "title": "Legacy repeat",
+            "recurrence": {"kind": "on_dates", "days": ["2026-09-03", "2026-09-05"]},
+        },
+    )
+    plan = {
+        "id": "p-shelf",
+        "date": DEFAULT_MOMENT.date().isoformat(),
+        "slots": [{"sector": 1, "task_id": "t-shelf"}],
+    }
+    client.put(f"/api/day-plans/{plan['date']}", json=plan)
+    client.post("/api/tasks/t-shelf/status", json={"to": "planned"})
+    client.post("/api/tasks/t-shelf/status", json={"to": "doing"})
+    session_id = _start(client, FAST)["id"]
+    clock.advance(timedelta(minutes=10))
+    segment_id = client.get(f"/api/sessions/{session_id}").json()["timeline"][0]["id"]
+
+    client.post("/api/reviews", json={"segment_id": segment_id, "score": 4})
+    task = client.get("/api/tasks/t-shelf").json()
+
+    assert task["status"] == "done"
 
 
 @pytest.mark.api
