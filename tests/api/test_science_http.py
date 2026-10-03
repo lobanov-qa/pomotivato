@@ -1,4 +1,4 @@
-"""HTTP floor for spec 05 E4b science endpoints: add/activate, hints, due."""
+"""HTTP floor for spec 05 E4b science endpoints: add, hints, due."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def plan_for(client: TestClient, day: date, slots: list[dict[str, Any]]) -> dict
     return dict(response.json())
 
 
-# ---------------------------------------------------------------- add / activate
+# ---------------------------------------------------------------- add
 
 
 @pytest.mark.api
@@ -88,52 +88,6 @@ def test_add_refuses_past_dates_and_unknown_tasks(http_client):
     assert "past" in past.json()["detail"]["message"]
     assert missing.status_code == HTTPStatus.NOT_FOUND
     assert_detail_code(missing, "not_found")
-
-
-@pytest.mark.api
-def test_activate_materializes_daily_once_keeps_manual_plan(http_client):
-    client, _clock = http_client
-    make_task(client, "t-daily", recurrence={"kind": "daily"})
-    make_task(client, "t-once")
-    make_task(client, "t-done", recurrence={"kind": "daily"})
-    for to in ("planned", "doing", "done"):  # the full V7 chain
-        client.post("/api/tasks/t-done/status", json={"to": to})
-    plan_for(client, TODAY, [{"sector": 1, "task_id": "t-once"}])
-
-    result = client.post(f"/api/day-plans/{TODAY}/activate")
-
-    body = result.json()
-    assert result.status_code == HTTPStatus.OK
-    assert body["added"] == ["t-daily"]  # the done task is not materialized
-    assert [(s["sector"], s["task_id"]) for s in body["plan"]["slots"]] == [
-        (1, "t-once"),
-        (2, "t-daily"),
-    ]
-
-    second = client.post(f"/api/day-plans/{TODAY}/activate")
-    assert second.json()["added"] == []  # GWT-A2 over HTTP
-    assert second.json()["plan"]["slots"] == body["plan"]["slots"]
-
-
-@pytest.mark.api
-def test_activate_full_day_reports_skip_not_error(http_client):
-    client, _clock = http_client
-    for n in range(12):
-        make_task(client, f"t-f{n}")
-    plan_for(
-        client,
-        TODAY,
-        [{"sector": s, "task_id": f"t-f{s - 1}"} for s in range(1, 13)],
-    )
-    make_task(client, "t-late", recurrence={"kind": "daily"})
-
-    result = client.post(f"/api/day-plans/{TODAY}/activate")
-
-    assert result.status_code == HTTPStatus.OK  # honest outcome in the body
-    assert result.json()["skipped"] == ["t-late"]
-
-
-# ---------------------------------------------------------------- hints
 
 
 @pytest.mark.api

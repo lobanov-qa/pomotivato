@@ -1,19 +1,18 @@
-"""Pure day-plan mutation helpers for add/activate (spec 05 §3.2, §3.8).
+"""Pure day-plan mutation helpers for add (spec 05 §3.8; E4c §9).
 
-Both the drag-to-plan endpoint and recurrence activation share one
-primitive: append the task's chunk (estimate_blocks slots, V10 cap) to the
-first free sectors. What does not fit is reported, never silently lost —
-the response carries `skipped` so the week screen can say so honestly.
+The drag-to-plan primitive: append the task's chunk (estimate_blocks slots,
+V10 cap) to the first free sectors. What does not fit is reported, never
+silently lost — the response carries `skipped` so the week screen can say
+so honestly. `activate_recurring` died with the "Repeat into plan" button
+(spec 07 A11): the plan is derived from the doing column, day marks live
+on the card.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
 
 from pomotivato.core.models import MAX_SECTOR, DayPlan, Slot, Task
-from pomotivato.core.schedule import expand_recurrence
-from pomotivato.services.week_view import ACTIVE_STATUSES
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,34 +55,3 @@ def add_task_to_plan(plan: DayPlan, task: Task) -> AddOutcome:
     if added_count == 0:
         return AddOutcome(plan=new_plan, added=(), skipped=(task.id,))
     return AddOutcome(plan=new_plan, added=(task.id,), skipped=())
-
-
-def activate_recurring(plan: DayPlan, tasks: tuple[Task, ...], day: date) -> AddOutcome:
-    """Append every recurring task materialized on `day` (spec 05 §3.2).
-
-    Candidates keep the week-view semantics (single source, DRY):
-    non-Once recurrence among non-DONE/non-ARCHIVED timer tasks, decided by
-    the same pure `expand_recurrence(task.recurrence, day, day)` the browser
-    reads from — the UI preview and the write path can never disagree.
-    DF13: no-timer errands never materialize onto a day. Order is task id,
-    so the result is deterministic regardless of the repository scan order.
-    """
-    candidates = sorted(
-        (
-            task
-            for task in tasks
-            if task.status in ACTIVE_STATUSES
-            and not task.no_timer
-            and expand_recurrence(task.recurrence, day, day)
-        ),
-        key=lambda task: task.id,
-    )
-    current = plan
-    added: list[str] = []
-    skipped: list[str] = []
-    for task in candidates:
-        outcome = add_task_to_plan(current, task)
-        current = outcome.plan
-        added += outcome.added
-        skipped += outcome.skipped
-    return AddOutcome(plan=current, added=tuple(added), skipped=tuple(skipped))

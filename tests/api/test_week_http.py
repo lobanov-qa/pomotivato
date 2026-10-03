@@ -137,12 +137,13 @@ def test_week_future_days_materialize_daily_recurrence(http_app):
 
 
 @pytest.mark.api
-def test_week_future_day_shows_activated_slot_and_no_ghost(http_app):
-    """Spec 05 §3.2/§3.8: after activate, the daily task reads as a slot."""
+def test_week_future_day_shows_added_slot_and_no_ghost(http_app):
+    """Spec 05 §3.8 (E4c §9: via add, the activate endpoint is gone): after
+    the card lands in the plan, the week reads a real slot, not a ghost."""
     client, clock = http_app
     tomorrow = (clock.now().date() + timedelta(days=1)).isoformat()
 
-    added = client.post(f"/api/day-plans/{tomorrow}/activate")
+    added = client.post(f"/api/day-plans/{tomorrow}/add", json={"task_id": "h-1"})
 
     assert added.status_code == HTTPStatus.OK
     assert added.json()["added"]  # "h-1" lands on sector 1

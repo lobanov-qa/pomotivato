@@ -21,9 +21,7 @@ import {
   columnOf,
   deleteErrorKey,
   dropTarget,
-  withinFilter,
   type BoardColumn,
-  type BoardFilter,
 } from "@/features/kanban/board";
 import {
   useCloneTask,
@@ -39,8 +37,15 @@ import {
 import { deriveSlots, moveTaskBlock, planIdForDate, taskGroups } from "@/features/kanban/planner";
 import { isFrogCard, needsWhenThen } from "@/features/kanban/science";
 import { sprintDays } from "@/features/kanban/recurrence";
+import {
+  defaultScope,
+  readScopeParam,
+  scopeOptions,
+  withinScope,
+  writeScopeParam,
+  type ScopeId,
+} from "@/features/kanban/scope";
 import { useSprints } from "@/features/sprints/hooks";
-import { mondayOf } from "@/features/week/dates";
 import { useUiSettings } from "@/features/settings/hooks";
 import { t } from "@/i18n/ru";
 import { cn } from "@/lib/utils";
@@ -54,7 +59,7 @@ export function KanbanScreen() {
   const { tasks, byId, error: loadError, isLoading } = useTasks();
   const { data: frog } = useFrogId();
   const { data: settings } = useUiSettings();
-  const { active: activeSprint } = useSprints();
+  const { sprints } = useSprints();
   // DF6 (spec 06): the amber nag rings honour the switch; until settings
   // load (or if the server is down) the current behavior (on) holds.
   const wetEnabled = settings?.ui.wet_hints ?? true;
@@ -68,7 +73,13 @@ export function KanbanScreen() {
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [panelId, setPanelId] = useState<string | null>(null); // DF2 card panel
-  const [filter, setFilter] = useState<BoardFilter>("week"); // archive replacement
+  const [scopeOverride, setScopeOverride] = useState<ScopeId | undefined>(
+    readScopeParam, // ?sprint=<id|none> survives reload (spec 07 §4.3)
+  );
+  // The selector resolves after the state block: default = the sprint
+  // covering today, else the shelf (spec 07 §4.3).
+  const scope: ScopeId = defaultScope(sprints, today(), scopeOverride);
+  const scopeKnown = scopeOverride !== undefined || sprints.length > 0;
   const [conflictToast, setConflictToast] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
 
@@ -126,15 +137,19 @@ export function KanbanScreen() {
     },
   });
 
-  /** DF8: the sprint-day tick row (labels in the board's dd.MM form). */
-  const repeatDays = useMemo(
-    () =>
-      sprintDays(activeSprint).map((iso) => ({
-        iso,
-        label: `${iso.slice(8)}.${iso.slice(5, 7)}`,
-      })),
-    [activeSprint],
-  );
+  /** DF8 row, re-sourced by E4c §4.5: the ticks belong to the CARD's own
+   * sprint (V19 membership, A8) — a shelf card shows no date row at all.
+   * Before this it was the active sprint regardless of which card the
+   * panel opened, which invited exactly the past-day bug V21 closes. */
+  const panelDays = useMemo(() => {
+    const owner = panelId
+      ? sprints.find((sp) => sp.id === byId.get(panelId)?.sprint_id) ?? null
+      : null;
+    return sprintDays(owner).map((iso) => ({
+      iso,
+      label: `${iso.slice(8)}.${iso.slice(5, 7)}`,
+    }));
+  }, [panelId, sprints, byId]);
 
   /** Re-PUT the derived day plan after any doing-column change. */
   async function syncPlan(): Promise<void> {
@@ -160,7 +175,21 @@ export function KanbanScreen() {
     if (!over) return;
     const task = byId.get(String(active.id));
     const to = String(over.id) as TaskStatus;
-    if (!task || dropTarget(task.status, to) === null) return;
+    if (!task) return;
+    if (dropTarget(task.status, to) === null) {
+      // DF15 (spec 07): the illegal drop says so instead of vanishing in
+      // silence. «В работе» has its own law: V27 — the card's sprint must
+      // cover today (the shelf is exempt), so the refusal names the fix.
+      const doingToday =
+        to === "doing" &&
+        task.sprint_id !== null &&
+        !sprints.some(
+          (sp) => sp.id === task.sprint_id && sp.status === "active" && sp.is_current,
+        );
+      setConflictToast(doingToday ? t("kanban.scope-wrong-sprint") : t("kanban.drop-refused"));
+      window.setTimeout(() => setConflictToast(null), 3500);
+      return;
+    }
     try {
       await move.mutateAsync({ id: task.id, to });
     } catch (error) {
@@ -216,6 +245,8 @@ export function KanbanScreen() {
         important: false,
         urgent: false,
         estimate_blocks: 1,
+        // A13: cards are born where the selector points (V28 re-checks).
+        sprint_id: scope,
       })
       .catch(() => undefined);
     setNewTitle("");
@@ -231,24 +262,28 @@ export function KanbanScreen() {
   return (
     <div className="flex flex-col gap-4" data-testid="kanban.screen">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold">{t("kanban.filter-title")}</h2>
-        <div className="flex gap-1" role="group" aria-label={t("kanban.filter-title")}>
-          {(["week", "all"] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              data-testid={`kanban.filter-${value}`}
-              aria-pressed={filter === value}
-              onClick={() => setFilter(value)}
-              className={cn(
-                "rounded-md border px-3 py-1 text-xs transition-colors",
-                filter === value ? "border-primary bg-primary/10 font-medium text-primary" : "hover:bg-muted",
-              )}
-            >
-              {t(value === "week" ? "kanban.filter-week" : "kanban.filter-all")}
-            </button>
+        <h2 className="text-sm font-semibold">{t("kanban.scope-title")}</h2>
+        {/* A13: the selector offers activated sprints + the shelf only;
+            choosing an unknown scope before sprints load keeps the board
+            empty rather than lying with the fallback list. */}
+        <select
+          data-testid="kanban.scope-select"
+          aria-label={t("kanban.scope-title")}
+          className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+          value={scope === null ? "none" : scope}
+          disabled={!scopeKnown}
+          onChange={(e) => {
+            const next = e.target.value === "none" ? null : e.target.value;
+            setScopeOverride(next);
+            writeScopeParam(next);
+          }}
+        >
+          {scopeOptions(sprints).map((option) => (
+            <option key={option.value ?? "none"} value={option.value ?? "none"}>
+              {option.label === "shelf" ? t("kanban.scope-none") : option.label}
+            </option>
           ))}
-        </div>
+        </select>
       </div>
       <form
         className="flex gap-2"
@@ -275,11 +310,10 @@ export function KanbanScreen() {
       <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setDraggedId(null)}>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {BOARD_COLUMNS.map((column) => {
-            const weekStart = mondayOf(today());
-            const cards = columnOf(
-              tasks.filter((task) => withinFilter(task, filter, weekStart)),
-              column,
-            );
+            // Scope = the columns' content entirely (spec 07 §4.3). The
+            // day-plan sync below deliberately ignores this filter: the
+            // plan is a property of the whole board, not the view.
+            const cards = columnOf(tasks.filter((task) => withinScope(task, scope)), column);
             return (
               <KanbanColumn
                 key={column}
@@ -392,7 +426,7 @@ export function KanbanScreen() {
         <TaskPanel
           task={panelTask}
           parents={tasks}
-          sprintDays={repeatDays}
+          sprintDays={panelDays}
           today={today()}
           onChange={onFieldChange}
           onDelete={(id) => void onDelete(id)}

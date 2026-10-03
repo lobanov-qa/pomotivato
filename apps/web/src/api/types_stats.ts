@@ -116,7 +116,8 @@ export interface PlannedDto {
   type: TaskType;
 }
 
-/** Sprint wire mirror (spec 05 §3.10, ADR-0003 p.3). */
+/** Sprint wire mirror (spec 05 §3.10, ADR-0005): container + lifecycle.
+ * The fate trio (E4c PR 2, spec 07 §6) is server-computed per read. */
 export interface SprintDto {
   id: string;
   number: number;
@@ -126,9 +127,12 @@ export interface SprintDto {
   goal: string | null;
   done_criteria: string | null;
   status: "planned" | "active" | "completed";
+  unfinished_count: number;
+  carry_pending: number;
+  is_current: boolean;
 }
 
-/** add/activate outcome: honest plan + who got in / squeezed out (§3.8). */
+/** add outcome: honest plan + who got in / squeezed out (spec 05 §3.8). */
 export interface AddResultDto {
   plan: DayPlanDto;
   added: string[];

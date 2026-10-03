@@ -122,13 +122,6 @@ function mockFetch() {
         { headers: { "content-type": "application/json" } },
       );
     }
-    if (url.pathname.endsWith("/activate")) {
-      posted.push({ url: url.pathname, body: init?.body });
-      return new Response(
-        JSON.stringify({ plan: { id: "p", date: "x", slots: [] }, added: ["h-1"], skipped: [] }),
-        { headers: { "content-type": "application/json" } },
-      );
-    }
     if (/\/slots\/\d+$/.test(url.pathname) && init?.method === "DELETE") {
       posted.push({ url: url.pathname, body: null });
       return new Response(JSON.stringify({ id: "p", date: "x", slots: [] }), {
@@ -235,20 +228,6 @@ describe("WeekScreen", () => {
     // refetch by design), so the contract is the DOM, not the network.
     await userEvent.click(screen.getByTestId("week.prev"));
     await waitFor(() => expect(screen.getByTestId(`week.day-${BASE}`)).toBeInTheDocument());
-  });
-
-  it("activation button posts to today and flashes the honest outcome", async () => {
-    mockFetch();
-    const todayIso = new Date().toLocaleDateString("en-CA");
-
-    renderScreen();
-    await screen.findByTestId("week.activate-today");
-    await userEvent.click(screen.getByTestId("week.activate-today"));
-
-    await waitFor(() =>
-      expect(posted.some((x) => x.url === `/api/day-plans/${todayIso}/activate`)).toBe(true)
-    );
-    expect(await screen.findByTestId("week.flash")).toHaveTextContent("Повторы добавлены");
   });
 
   it("detail arrows reorder the plan via slots/move (insert semantics)", async () => {

@@ -9,16 +9,14 @@ import pytest
 from pomotivato.core.models import (
     Daily,
     DayPlan,
-    Once,
     SessionSettings,
     Slot,
     Task,
     TaskStatus,
-    WeeklyDays,
 )
 from pomotivato.services.blocks import WorkBlock
 from pomotivato.services.hints import Hint, compute_hints
-from pomotivato.services.planner import activate_recurring, add_task_to_plan
+from pomotivato.services.planner import add_task_to_plan
 from tests.factories.core_models import day_plan_factory, task_factory
 
 TUESDAY = date(2026, 9, 8)
@@ -91,87 +89,7 @@ def test_add_grows_partial_chunk_up_to_estimate():
     assert [s.sector for s in grown.plan.slots] == [1, 2, 3]
 
 
-# ---------------------------------------------------------------- activation
-
-
 @pytest.mark.unit
-def test_activate_materializes_daily_task_once():  # GWT-A1
-    task = recurring()
-
-    outcome = activate_recurring(empty_plan(), (task,), TUESDAY)
-
-    assert [(s.sector, s.task_id) for s in outcome.plan.slots] == [(1, task.id)]
-    assert outcome.added == (task.id,)
-
-
-@pytest.mark.unit
-def test_activate_is_idempotent():  # GWT-A2
-    task = recurring()
-    first = activate_recurring(empty_plan(), (task,), TUESDAY)
-
-    second = activate_recurring(first.plan, (task,), TUESDAY)
-
-    assert second.plan.slots == first.plan.slots
-    assert second.added == () and second.skipped == ()
-
-
-@pytest.mark.unit
-def test_activate_skips_when_no_capacity_and_keeps_plan():  # GWT-A3
-    intruder = recurring()
-    busy = empty_plan()
-    for _ in range(12):
-        busy = add_task_to_plan(busy, recurring()).plan
-
-    outcome = activate_recurring(busy, (intruder,), TUESDAY)
-
-    assert outcome.plan.slots == busy.slots
-    assert outcome.skipped == (intruder.id,)
-
-
-@pytest.mark.unit
-def test_activate_ignores_non_matching_weekdays():  # GWT-A4
-    tuesday_only = recurring(recurrence=WeeklyDays(frozenset({1})))  # Tue=1
-    wednesday = date(2026, 9, 9)
-
-    outcome = activate_recurring(empty_plan(), (tuesday_only,), wednesday)
-
-    assert outcome.plan.slots == () and outcome.added == ()
-
-
-@pytest.mark.unit
-def test_activate_skips_once_habit_and_done():  # GWT-A5 + status guard
-    once = recurring(recurrence=Once())
-    done = recurring(status=TaskStatus.DONE)
-    archived = recurring(status=TaskStatus.ARCHIVED)
-
-    outcome = activate_recurring(empty_plan(), (once, done, archived), TUESDAY)
-
-    assert outcome.plan.slots == ()
-
-
-@pytest.mark.unit
-def test_activate_skips_no_timer_errand_even_when_recurring():
-    """DF13: an errand is never day work, not even a recurring one."""
-    errand = recurring(no_timer=True)
-
-    outcome = activate_recurring(empty_plan(), (errand,), TUESDAY)
-
-    assert outcome.plan.slots == ()
-
-
-@pytest.mark.unit
-def test_activate_order_is_deterministic_by_task_id():
-    later = recurring(id="task-z", recurrence=Daily())
-    earlier = recurring(id="task-a", recurrence=Daily())
-
-    outcome = activate_recurring(empty_plan(), (later, earlier), TUESDAY)
-
-    assert [s.task_id for s in outcome.plan.slots] == ["task-a", "task-z"]
-
-
-# ---------------------------------------------------------------- hints rules
-
-
 def block(task_id: str, minutes: int = 25, seg: int = 0) -> WorkBlock:
     return WorkBlock(segment_id=f"seg-{seg}", task_id=task_id, day=TUESDAY, minutes=minutes)
 

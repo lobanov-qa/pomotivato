@@ -75,8 +75,15 @@ export function usePatchTask() {
 export function useCreateTask() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (body: { id: string; title: string; type: TaskDto["type"]; important: boolean; urgent: boolean; estimate_blocks: number }) =>
-      api.createTask(body),
+    mutationFn: (body: {
+      id: string;
+      title: string;
+      type: TaskDto["type"];
+      important: boolean;
+      urgent: boolean;
+      estimate_blocks: number;
+      sprint_id: string | null;
+    }) => api.createTask(body),
     onSettled: () => invalidateBoard(client),
   });
 }

@@ -28,6 +28,8 @@ function task(overrides: Partial<TaskDto> = {}): TaskDto {
     benefit: null,
     cloned_from: null,
     no_timer: false,
+    sprint_id: null,
+    carry_choice: null,
     blocks_done: null,
     days_done: null,
     last_worked: null,
@@ -239,7 +241,9 @@ describe("KanbanScreen", () => {
     const user = userEvent.setup();
     // Stateful mock: PATCH mutates the live list and GET returns it — the
     // second tick must build on the card the server already saved.
-    const live = BOARD.map((t) => ({ ...t }));
+    // The sprint's tick row belongs to the CARD's own container now
+    // (E4c §4.5), so card "a" lives in the band sprint for this case.
+    const live = BOARD.map((t) => (t.id === "a" ? { ...t, sprint_id: "s-1" } : { ...t }));
     // E4c PR 4: the row gained the V21 guard (past days are not tickable),
     // so the band must cover the real today — window anchored to now.
     const now = new Date().toLocaleDateString("en-CA");
@@ -361,35 +365,65 @@ describe("KanbanScreen", () => {
     expect(closed).toBe(true);
   });
 
-  it("hides last week's done cards under 'This week' and brings them back (DF3-filter)", async () => {
+  it("board reads one scope: sprint card by default, shelf after the switch (E4c selector)", async () => {
     const user = userEvent.setup();
-    const oldDone = {
-      ...task({ id: "old" }),
-      status: "done" as const,
-      created_at: "2020-01-02T09:00:00+00:00",
-      last_worked: "2020-01-03",
+    const scoped = {
+      ...task({ id: "s1", title: "Sprint card" }),
+      status: "backlog" as const,
+      sprint_id: "sp-1",
     };
     fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.startsWith("/api/tasks")) return jsonResponse(200, [...BOARD, oldDone]);
+      if (url.startsWith("/api/tasks")) return jsonResponse(200, [...BOARD, scoped]);
       if (url.startsWith("/api/day-plans/")) {
         return jsonResponse(200, { id: "p", date: "2026-09-05", slots: [] });
       }
       if (url === "/api/frog") return jsonResponse(200, { task_id: frogId });
       if (url === "/api/settings") return jsonResponse(200, SETTINGS_ON);
-      if (url === "/api/sprints") return jsonResponse(200, []);
+      if (url === "/api/sprints") {
+        return jsonResponse(200, [
+          {
+            id: "sp-1",
+            number: 3,
+            name: "w39",
+            start_date: new Date().toLocaleDateString("en-CA"),
+            end_date: new Date(Date.now() + 86_400_000).toLocaleDateString("en-CA"),
+            goal: null,
+            done_criteria: null,
+            status: "active",
+            unfinished_count: 0,
+            carry_pending: 0,
+            is_current: true,
+          },
+        ]);
+      }
       throw new Error(`unexpected fetch: ${url}`);
     });
     renderScreen();
+
+    // default scope: the sprint covering today wins over the shelf (spec 4.3)
+    expect(await screen.findByTestId("task-card.root-s1")).toBeInTheDocument();
+    expect(screen.queryByTestId("task-card.root-a")).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByTestId("kanban.scope-select"), "none");
+
+    // the shelf appears; the choice rides the URL (?sprint=none)
     await screen.findByTestId("task-card.root-a");
+    expect(screen.getByTestId("task-card.root-a")).toBeInTheDocument();
+    expect(screen.queryByTestId("task-card.root-s1")).not.toBeInTheDocument();
+    expect(window.location.search).toContain("sprint=none");
 
-    expect(screen.queryByTestId("task-card.root-old")).not.toBeInTheDocument();
-    // today's Done card survives: it belongs to this week
-    expect(screen.getByTestId("task-card.root-d")).toBeInTheDocument();
-
-    await user.click(screen.getByTestId("kanban.filter-all"));
-
-    expect(await screen.findByTestId("task-card.root-old")).toBeInTheDocument();
+    // quick-add lands in the selected scope (V28/A13)
+    await user.type(screen.getByTestId("kanban.create-input"), "Shelf fresh");
+    await user.click(screen.getByTestId("kanban.create-submit"));
+    await waitFor(() => {
+      const post = fetchMock.mock.calls.find(
+        ([url, init]) => url === "/api/tasks" && (init as RequestInit)?.method === "POST",
+      );
+      expect(post).toBeTruthy();
+      const body = JSON.parse(String((post![1] as RequestInit).body));
+      expect(body.sprint_id).toBeNull(); // the shelf
+    });
   });
 
   it("shows the done/total dot row for a ticked card (DF10)", async () => {

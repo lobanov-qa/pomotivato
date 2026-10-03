@@ -7,7 +7,6 @@ import {
   columnOf,
   deleteErrorKey,
   dropTarget,
-  withinFilter,
 } from "./board";
 
 /**
@@ -32,6 +31,8 @@ function task(overrides: Partial<TaskDto> = {}): TaskDto {
     benefit: null,
     cloned_from: null,
     no_timer: false,
+    sprint_id: null,
+    carry_choice: null,
     blocks_done: null,
     days_done: null,
     last_worked: null,
@@ -104,6 +105,9 @@ describe("optimistic move", () => {
     }
   });
 
+});
+
+describe("deleteErrorKey (DF1)", () => {
   it("routes each server delete refusal to its own RU key (DF1)", () => {
     expect(deleteErrorKey("task 'x' still has children")).toBe("kanban.delete-blocked-children");
     expect(deleteErrorKey("task 'x' is planned on ['2026-09-10']")).toBe(
@@ -113,73 +117,5 @@ describe("optimistic move", () => {
       "kanban.delete-blocked-status",
     );
     expect(deleteErrorKey("something else entirely")).toBe("kanban.delete-failed");
-  });
-
-  it("filters columns by week membership (archive replacement, DF3-filter)", () => {
-    const MONDAY = "2026-09-07";
-    const withRec = (rec: Record<string, unknown>) => ({ kind: "once", ...rec });
-
-    // "All" never hides anything.
-    expect(withinFilter(task({ status: "done" }), "all", MONDAY)).toBe(true);
-    // backlog/doing are always whole.
-    expect(withinFilter(task({ status: "backlog" }), "week", MONDAY)).toBe(true);
-    expect(withinFilter(task({ status: "doing" }), "week", MONDAY)).toBe(true);
-    // worked this week -> stays; worked last week -> hides.
-    expect(
-      withinFilter(task({ status: "done", last_worked: "2026-09-08" }), "week", MONDAY),
-    ).toBe(true);
-    expect(
-      withinFilter(task({ status: "done", last_worked: "2026-09-06" }), "week", MONDAY),
-    ).toBe(false);
-    // born this week stays even without blocks; born earlier and never worked hides.
-    expect(
-      withinFilter(task({ status: "planned", created_at: "2026-09-08T09:00:00+00:00" }), "week", MONDAY),
-    ).toBe(true);
-    expect(
-      withinFilter(task({ status: "planned", created_at: "2026-09-01T09:00:00+00:00" }), "week", MONDAY),
-    ).toBe(false);
-    // active recurrences are future-facing: they stay, ticks ahead too.
-    expect(
-      withinFilter(
-        task({ status: "planned", created_at: "2026-09-01T09:00:00+00:00", recurrence: withRec({ kind: "daily" }) }),
-        "week",
-        MONDAY,
-      ),
-    ).toBe(true);
-    expect(
-      withinFilter(
-        task({
-          status: "planned",
-          created_at: "2026-09-01T09:00:00+00:00",
-          recurrence: withRec({ kind: "on_dates", days: ["2026-09-05"] }),
-        }),
-        "week",
-        MONDAY,
-      ),
-    ).toBe(false); // ticks all in the past: stale one-off, archived by the view
-    expect(
-      withinFilter(
-        task({
-          status: "planned",
-          created_at: "2026-09-01T09:00:00+00:00",
-          recurrence: withRec({ kind: "on_dates", days: ["2026-09-05", "2026-09-12"] }),
-        }),
-        "week",
-        MONDAY,
-      ),
-    ).toBe(true); // a tick ahead keeps it alive
-    // done is never revived by recurrence: the verdict was the day's end.
-    expect(
-      withinFilter(
-        task({
-          status: "done",
-          created_at: "2026-09-01T09:00:00+00:00",
-          last_worked: "2026-09-05",
-          recurrence: withRec({ kind: "on_dates", days: ["2026-09-12"] }),
-        }),
-        "week",
-        MONDAY,
-      ),
-    ).toBe(false);
   });
 });
