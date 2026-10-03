@@ -35,6 +35,7 @@ from pomotivato.core.models import (
     TaskStatus,
     TaskType,
 )
+from pomotivato.core.trim import excess_done
 from pomotivato.core.validation import (
     validate_deadline_realism,
     validate_planning_ready,
@@ -210,6 +211,10 @@ class TaskService:
             if not task.no_timer and timer_load >= limit:
                 msg = f"only {limit} tasks fit in work today"
                 raise ConflictError(msg)
+        if new_status is TaskStatus.DONE and task.status is not TaskStatus.DONE:
+            # One door for every arrival into «Готово»: the trim (V26) must
+            # not be skippable by which route the card came in.
+            return await self.complete(task.id)
         updated = replace(task, status=new_status)
         if new_status is TaskStatus.DOING:
             # A28: entering work on an unmarked day marks it — the plan and
@@ -218,6 +223,33 @@ class TaskService:
         await self._tasks.put(updated)
         await self._session.flush()
         return updated
+
+    async def complete(self, task_id: str) -> Task:
+        """V26 (spec 07 §4.6): the only door into «Готово».
+
+        Stamps done_at (the trim clock, the author's 03.10 decision: records
+        are written when a card finishes and the archive sweep reads exactly
+        them) and trims the card's own scope to done_visible_limit — the
+        oldest finished surplus goes to ARCHIVED, history intact.
+        """
+        task = await self.get(task_id)
+        if task.status is not TaskStatus.DONE:
+            closed = replace(task, status=TaskStatus.DONE, done_at=self._clock.now())
+            await self._tasks.put(closed)
+            await self._session.flush()
+            task = closed
+        await self._trim_done_scope(task.sprint_id)
+        # The trim may have archived this very card (limit 0 — the spec
+        # says so honestly); re-read, never return a stale DONE.
+        return await self.get(task.id)
+
+    async def _trim_done_scope(self, sprint_id: str | None) -> None:
+        """Archive the done surplus of one scope (shelf: sprint_id None)."""
+        limit = (await self._settings.get_ui_settings()).done_visible_limit
+        scope = await self._tasks.list(sprint_id=sprint_id, no_sprint=sprint_id is None)
+        for stale in excess_done(scope, limit):
+            await self._tasks.put(replace(stale, status=TaskStatus.ARCHIVED))
+        await self._session.flush()
 
     async def _require_done_clean(self, task: Task) -> None:
         """V31 (spec 07): a sprint card with a hole never reaches «Готово».
@@ -255,10 +287,7 @@ class TaskService:
         if not close_eligible(task, today, worked):
             msg = "card is not closeable: work exists, dates ahead or ticks unspent"
             raise ConflictError(msg)
-        closed = replace(task, status=TaskStatus.DONE)
-        await self._tasks.put(closed)
-        await self._session.flush()
-        return closed
+        return await self.complete(task.id)
 
     async def fold_yesterday(self) -> tuple[Task, ...]:
         """V30+V33 (spec 07 §5.7): the lazy day fold, first read of a new day.
@@ -281,6 +310,9 @@ class TaskService:
                 continue
             nxt = fold_stale_card(task, today, worked_scan.get(task.id, frozenset()))
             if nxt is not None and nxt is not task.status:
+                if nxt is TaskStatus.DONE:
+                    folded.append(await self.complete(task.id))
+                    continue
                 moved = replace(task, status=nxt)
                 await self._tasks.put(moved)
                 folded.append(moved)

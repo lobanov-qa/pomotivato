@@ -199,3 +199,25 @@ def test_score_becomes_nullable_without_losing_existing_scores(tmp_path):
         ]
     assert kept == 4
     assert skipped is None
+
+
+@pytest.mark.api
+def test_done_at_column_lands_and_roundtrips(tmp_path: Path) -> None:
+    """E4c PR 6 hop (V26): the trim clock arrives additive; old rows NULL."""
+    path = tmp_path / "done-at-test.db"
+    upgrade_db(path, "b7e02c9a4d13")
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "INSERT INTO tasks (id, title, type, important, urgent, status,"
+            " estimate_blocks, recurrence_json, created_at, no_timer)"
+            " VALUES ('old', 'Pre-trim card', 'normal', 0, 0, 'done', 1, '{}',"
+            " '2026-09-01T00:00:00+00:00', 0)"
+        )
+
+    upgrade_db(path, HEAD)
+
+    with sqlite3.connect(path) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(tasks)").fetchall()}
+        stamp = connection.execute("SELECT done_at FROM tasks WHERE id='old'").fetchone()[0]
+    assert "done_at" in columns
+    assert stamp is None  # legacy closings fall back to created_at (spec §4.6)

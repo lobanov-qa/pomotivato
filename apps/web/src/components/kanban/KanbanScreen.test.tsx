@@ -30,6 +30,7 @@ function task(overrides: Partial<TaskDto> = {}): TaskDto {
     no_timer: false,
     sprint_id: null,
     carry_choice: null,
+    done_at: null,
     blocks_done: null,
     days_done: null,
     last_worked: null,
@@ -87,7 +88,13 @@ const SETTINGS_ON = {
     long_break_every: 4,
     auto_start_next: true,
   },
-  ui: { max_in_work: 6, theme: "auto", require_science_fields: false, wet_hints: true },
+  ui: {
+    max_in_work: 6,
+    theme: "auto",
+    require_science_fields: false,
+    wet_hints: true,
+    done_visible_limit: 10,
+  },
 };
 
 afterEach(() => {
@@ -526,6 +533,18 @@ describe("KanbanScreen", () => {
     await user.keyboard("{Escape}");
 
     expect(screen.queryByTestId("task-panel.root-a")).not.toBeInTheDocument();
+  });
+
+  it("the done column carries the V26 trim hint with the live limit", async () => {
+    renderScreen();
+    await screen.findByTestId("kanban.screen");
+
+    // §4.6: the hover note names the limit and the archive; only «Готово» has one
+    expect(screen.getByTestId("kanban.column-title-done")).toHaveAttribute(
+      "title",
+      expect.stringContaining("сверх лимита (10)"),
+    );
+    expect(screen.getByTestId("kanban.column-title-backlog")).not.toHaveAttribute("title");
   });
 
   it("wet-hint marks only scheduled cards with a blank when_then", async () => {

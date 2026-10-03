@@ -25,6 +25,7 @@ Theme = Literal["auto", "light", "dark"]
 
 DEFAULT_MAX_IN_WORK = 6  # funnel law: doing == today == the dial (core MAX_SECTOR=12 ceiling)
 DEFAULT_THEME: Theme = "auto"  # spec 03 ⚑ Q9: OS-following until the toggle says otherwise
+DEFAULT_DONE_VISIBLE_LIMIT = 10  # V26 (spec 07 §4.6): «Готово» shows 10, the rest is archived
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +39,10 @@ class UiSettings:
     # on by default, off for the timer-first crowd. Presentation-only:
     # the V8 hard gate (require_science_fields) is a different switch.
     wet_hints: bool = True
+    # V26/A22 (spec 07 §4.6): cards visible in «Готово» per scope; 0..30,
+    # excess goes to ARCHIVED immediately (author's live DB starts empty,
+    # so the default never touched existing data).
+    done_visible_limit: int = DEFAULT_DONE_VISIBLE_LIMIT
 
 
 class SettingsService:
@@ -60,7 +65,7 @@ class SettingsService:
         """(max_in_work, theme, require_science_fields, wet_hints) + defaults."""
         raw = await self._repo.get(UI_SETTINGS_KEY)
         if raw is None:
-            return UiSettings(DEFAULT_MAX_IN_WORK, DEFAULT_THEME, False)
+            return UiSettings()
         data = json.loads(raw)
         max_in_work = int(data.get("max_in_work", DEFAULT_MAX_IN_WORK))
         theme = data.get("theme", DEFAULT_THEME)
@@ -69,6 +74,7 @@ class SettingsService:
             theme if theme in ("auto", "light", "dark") else DEFAULT_THEME,
             bool(data.get("require_science_fields", False)),
             bool(data.get("wet_hints", True)),
+            int(data.get("done_visible_limit", DEFAULT_DONE_VISIBLE_LIMIT)),
         )
 
     async def put_ui_settings(
@@ -77,12 +83,16 @@ class SettingsService:
         theme: Theme,
         require_science_fields: bool = False,
         wet_hints: bool = True,
+        done_visible_limit: int = DEFAULT_DONE_VISIBLE_LIMIT,
     ) -> None:
         if not 1 <= max_in_work <= 12:
             msg = f"max_in_work must be 1..12, got {max_in_work}"
             raise ValidationError(msg)
         if theme not in ("auto", "light", "dark"):
             msg = f"unknown theme {theme!r}"
+            raise ValidationError(msg)
+        if not 0 <= done_visible_limit <= 30:
+            msg = f"done_visible_limit must be 0..30, got {done_visible_limit}"
             raise ValidationError(msg)
         await self._repo.set(
             UI_SETTINGS_KEY,
@@ -92,6 +102,7 @@ class SettingsService:
                     "theme": theme,
                     "require_science_fields": bool(require_science_fields),
                     "wet_hints": bool(wet_hints),
+                    "done_visible_limit": int(done_visible_limit),
                 }
             ),
         )
@@ -103,4 +114,6 @@ class SettingsService:
     async def set_require_science_fields(self, value: bool) -> None:
         """Write-through to the ui blob (the old key is retired, ⚑ 05 F1)."""
         ui = await self.get_ui_settings()
-        await self.put_ui_settings(ui.max_in_work, ui.theme, bool(value), ui.wet_hints)
+        await self.put_ui_settings(
+            ui.max_in_work, ui.theme, bool(value), ui.wet_hints, ui.done_visible_limit
+        )

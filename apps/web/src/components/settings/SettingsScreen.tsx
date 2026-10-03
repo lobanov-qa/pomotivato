@@ -204,6 +204,23 @@ function SettingsForm({ settings }: { settings: SettingsBundleDto }) {
             }
           />
         </div>
+        <div className="grid grid-cols-[1fr_96px] items-center gap-3">
+          <Label htmlFor="settings-done-visible-limit">{t("settings.done-visible-limit")}</Label>
+          <Input
+            id="settings-done-visible-limit"
+            type="number"
+            min={0}
+            max={30}
+            data-testid="settings.field-done_visible_limit"
+            value={uiDraft.done_visible_limit}
+            onChange={(e) =>
+              setUiDraft({
+                ...uiDraft,
+                done_visible_limit: Math.min(30, Math.max(0, Number(e.target.value) || 0)),
+              })
+            }
+          />
+        </div>
         <div className="flex flex-col gap-1">
           <Label>{t("settings.theme")}</Label>
           <div className="flex gap-1" role="radiogroup" aria-label={t("settings.theme")}>

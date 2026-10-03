@@ -21,7 +21,13 @@ const SETTINGS = {
     warmup_min: 0,
     special_breaks: [],
   },
-  ui: { max_in_work: 6, theme: "auto" as const, require_science_fields: false, wet_hints: true },
+  ui: {
+    max_in_work: 6,
+    theme: "auto" as const,
+    require_science_fields: false,
+    wet_hints: true,
+    done_visible_limit: 10,
+  },
 };
 
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -79,7 +85,22 @@ describe("SettingsScreen", () => {
     const work = await screen.findByTestId("settings.field-work_min");
     expect(work).toHaveValue(25);
     expect(screen.getByTestId("settings.field-max_in_work")).toHaveValue(6);
+    // V26 (spec 07 §4.6): the done-trim limit is an ordinary ui number field
+    expect(screen.getByTestId("settings.field-done_visible_limit")).toHaveValue(10);
     expect(screen.getByTestId("settings.save")).toBeDisabled(); // nothing dirty
+  });
+
+  it("the done-trim limit clamps at 30 and rides the ui PUT (V26)", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByTestId("settings.field-work_min");
+
+    await typeNumber(screen.getByTestId("settings.field-done_visible_limit"), "99");
+    await user.click(screen.getByTestId("settings.save"));
+
+    await waitFor(() => expect(puts).toHaveLength(2));
+    const uiPut = puts.find((p) => p.url === "/api/settings/ui");
+    expect(uiPut?.body).toMatchObject({ done_visible_limit: 30 });
   });
 
   it("enables save after an edit and PUTs both keys", async () => {

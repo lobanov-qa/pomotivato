@@ -16,10 +16,12 @@ interface Props {
   count: number;
   /** Whether the active card can legally land here (drop-zone highlight). */
   canReceive: boolean;
+  /** Hover note on the column title (V26 hint lives on «Готово», §4.6). */
+  hint?: string;
   children: ReactNode;
 }
 
-export function KanbanColumn({ column, title, count, canReceive, children }: Props) {
+export function KanbanColumn({ column, title, count, canReceive, hint, children }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: column });
   return (
     <section
@@ -33,7 +35,13 @@ export function KanbanColumn({ column, title, count, canReceive, children }: Pro
     >
       <header className="flex items-center gap-2 border-b px-3 py-2">
         <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", COLUMN_ACCENT[column])} />
-        <h2 className="text-sm font-semibold capitalize">{title}</h2>
+        <h2
+          className="text-sm font-semibold capitalize"
+          data-testid={`kanban.column-title-${column}`}
+          title={hint}
+        >
+          {title}
+        </h2>
         <span className="ml-auto text-xs tabular-nums text-muted-foreground">{count}</span>
       </header>
       <div className="flex flex-col gap-2 overflow-y-auto p-2">{children}</div>

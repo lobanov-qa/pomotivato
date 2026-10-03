@@ -31,6 +31,9 @@ export interface TaskDto {
   sprint_id: string | null;
   /** V34/A40: fate at the owner's closure ('left'/'moved'/null). */
   carry_choice: string | null;
+  /** V26 (spec 07 §4.6): last arrival into DONE — the trim clock; null for
+   * legacy closings and every non-done card. */
+  done_at: string | null;
   /** DF10: completed work blocks so far (board list only) — the day math. */
   blocks_done: number | null;
   /** Author's law 23.09: TICKED days already worked (board list only) — the
@@ -73,6 +76,7 @@ export interface UiSettingsDto {
   theme: ThemeName;
   require_science_fields: boolean;
   wet_hints: boolean;
+  done_visible_limit: number;
 }
 
 export interface SettingsBundleDto {

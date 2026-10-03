@@ -47,6 +47,7 @@ class TaskRow(Base):
     # V34/A40: fate chosen when the owner sprint closed; immutable once set
     # (CHECK in migration — a rewrite would be history tampering, not an edit).
     carry_choice: Mapped[str | None] = mapped_column(Text, nullable=True)
+    done_at: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(Text)
 
 
