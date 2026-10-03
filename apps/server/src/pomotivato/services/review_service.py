@@ -30,6 +30,7 @@ from pomotivato.infra.repository_sessions import (
     SegmentRepository,
 )
 from pomotivato.services.session_service import FsmRegistry
+from pomotivato.services.task_service import TaskService
 
 
 class ReviewService:
@@ -40,9 +41,11 @@ class ReviewService:
         session: AsyncSession,
         clock: Clock,
         registry: FsmRegistry,
+        tasks: TaskService,
     ) -> None:
         self._clock = clock
         self._registry = registry
+        self._task_service = tasks
         self._reviews = ReviewRepository(session)
         self._segments = SegmentRepository(session)
         self._repetitions = RepetitionRepository(session)
@@ -105,7 +108,11 @@ class ReviewService:
         nxt = walk_after_day(
             task, today, day_blocks=day_blocks, blocks_done_today=done_today, worked_days=worked
         )
-        if nxt is not None:
+        if nxt is TaskStatus.DONE:
+            # The done door lives in TaskService (V26 stamp + trim); a walk
+            # that ends in «Готово» must pass through it like any drag.
+            await self._task_service.complete(task.id)
+        elif nxt is not None:
             await self._tasks.put(replace(task, status=nxt))
 
     async def _advance_repetition(self, task_id: str | None) -> None:

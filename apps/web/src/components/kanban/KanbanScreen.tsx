@@ -63,6 +63,16 @@ export function KanbanScreen() {
   // DF6 (spec 06): the amber nag rings honour the switch; until settings
   // load (or if the server is down) the current behavior (on) holds.
   const wetEnabled = settings?.ui.wet_hints ?? true;
+  // V26 (spec 07 §4.6): «Готово» hides its own law — the hover note is
+  // honest about the limit, and at 0 it says "the limit is zero", not
+  // "there are no tasks".
+  const doneLimit = settings?.ui.done_visible_limit ?? 10;
+  function doneHint(column: string): string | undefined {
+    if (column !== "done") return undefined;
+    return doneLimit === 0
+      ? t("kanban.done-hint-zero")
+      : t("kanban.done-hint", "ru", { limit: doneLimit });
+  }
   const client = useQueryClient();
   const move = useMoveTask();
   const patch = usePatchTask();
@@ -319,6 +329,7 @@ export function KanbanScreen() {
                 key={column}
                 column={column}
                 title={columnTitles[column]}
+                hint={doneHint(column)}
                 count={cards.length}
                 canReceive={Boolean(
                   dragged && dropTarget(dragged.status, column as TaskStatus) !== null,

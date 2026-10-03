@@ -28,6 +28,7 @@ async def get_settings(session: DbSession) -> SettingsBundleDto:
             theme=ui.theme,
             require_science_fields=ui.require_science_fields,
             wet_hints=ui.wet_hints,
+            done_visible_limit=ui.done_visible_limit,
         ),
     )
 
@@ -44,6 +45,10 @@ async def put_session_settings(dto: SessionSettingsDto, session: DbSession) -> S
 async def put_ui_settings(dto: UiSettingsDto, session: DbSession) -> UiSettingsDto:
     service = SettingsService(session)
     await service.put_ui_settings(
-        dto.max_in_work, dto.theme, dto.require_science_fields, dto.wet_hints
+        dto.max_in_work,
+        dto.theme,
+        dto.require_science_fields,
+        dto.wet_hints,
+        dto.done_visible_limit,
     )
     return dto

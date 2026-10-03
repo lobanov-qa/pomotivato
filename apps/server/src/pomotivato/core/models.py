@@ -151,6 +151,10 @@ class Task:
     sprint_id: str | None = None
     # V34/A40: fate chosen at the owner sprint's closure; immutable once set.
     carry_choice: CarryChoice | None = None
+    # V26/A22 (spec 07 §4.6): when the card last entered DONE — the trim
+    # order for «Готово». None only for cards closed before this feature
+    # (and every non-DONE card); the trim falls back to created_at there.
+    done_at: datetime | None = None
 
     def repeat_days_ahead(self, today: date) -> tuple[date, ...]:
         """DF11 (spec 06): ticked/recurring days strictly after `today`.
@@ -430,6 +434,7 @@ def task_from_dict(data: Mapping[str, Any]) -> Task:
         carry_choice=_opt(
             data.get("carry_choice"), lambda r: _enum(CarryChoice, r, "carry_choice")
         ),
+        done_at=_opt(data.get("done_at"), lambda r: _parse_dt(r, "done_at")),
     )
 
 

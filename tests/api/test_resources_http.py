@@ -250,6 +250,7 @@ def test_settings_roundtrip_and_v5_rejection(http_app):
             "theme": "auto",
             "require_science_fields": False,
             "wet_hints": True,
+            "done_visible_limit": 10,
         },
     }
 
@@ -293,6 +294,7 @@ def test_ui_settings_roundtrip_keeps_session_key(http_app):
         "theme": "dark",
         "require_science_fields": False,
         "wet_hints": True,
+        "done_visible_limit": 10,
     }
     assert after["session"] == before  # keys are independent (spec 03 §9)
 

@@ -130,6 +130,8 @@ class TaskDto(BaseModel):
     sprint_id: str | None
     # V34/A40: the fate chosen at the owner's closure ('left'/'moved'/None).
     carry_choice: str | None
+    # V26 (spec 07 §4.6): the last arrival into DONE — the trim clock.
+    done_at: str | None = None
     created_at: str
     # DF10 (spec 06): completed work blocks so far (day summary / week math).
     # Only the list endpoint fills it (one grouped scan for the board);
@@ -367,6 +369,8 @@ class UiSettingsDto(BaseModel):
     theme: ThemeName = "auto"
     require_science_fields: bool = False
     wet_hints: bool = True
+    # V26 (spec 07 §4.6): cards visible in «Готово» per scope, rest archived.
+    done_visible_limit: int = Field(default=10, ge=0, le=30)
 
 
 class SettingsBundleDto(BaseModel):

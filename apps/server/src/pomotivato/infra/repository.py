@@ -64,6 +64,7 @@ def _task_to_row(task: Task) -> TaskRow:
         no_timer=task.no_timer,
         sprint_id=task.sprint_id,
         carry_choice=None if task.carry_choice is None else task.carry_choice.value,
+        done_at=None if task.done_at is None else task.done_at.isoformat(),
         created_at=task.created_at.isoformat(),
     )
 
@@ -87,6 +88,7 @@ def _task_from_row(row: TaskRow) -> Task:
         "no_timer": bool(row.no_timer),
         "sprint_id": row.sprint_id,
         "carry_choice": row.carry_choice,
+        "done_at": row.done_at,
         "created_at": row.created_at,
     }
     return task_from_dict(data)

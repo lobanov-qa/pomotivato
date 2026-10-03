@@ -7,6 +7,7 @@ from fastapi import APIRouter, status
 from pomotivato.api.deps import ClockDep, DbSession, RegistryDep
 from pomotivato.api.schemas import ReviewCreateDto, ReviewDto
 from pomotivato.services.review_service import ReviewService
+from pomotivato.services.task_service import TaskService
 
 router = APIRouter(prefix="/api/reviews", tags=["reviews"])
 
@@ -18,7 +19,7 @@ async def create_review(
     clock: ClockDep,
     registry: RegistryDep,
 ) -> ReviewDto:
-    service = ReviewService(session, clock, registry)
+    service = ReviewService(session, clock, registry, TaskService(session, clock))
     review = await service.submit(
         dto.segment_id, dto.score, dto.comment, recall_notes=dto.recall_notes, reward=dto.reward
     )
