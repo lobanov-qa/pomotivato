@@ -35,6 +35,9 @@ function task(overrides: Partial<TaskDto> = {}): TaskDto {
     blocks_done: null,
     days_done: null,
     last_worked: null,
+    days_missed: null,
+    days_left: null,
+    closeable: null,
     created_at: "2026-09-05T09:00:00+00:00",
     ...overrides,
   };

@@ -141,6 +141,13 @@ class TaskDto(BaseModel):
     # DF3-filter (spec 06): the last day a block of this card was worked
     # (ISO text), same board-scan discipline as blocks_done.
     last_worked: str | None = None
+    # E4c PR 4 (spec 07 §4.7): the state hint inputs, computed by the same
+    # board scan — the panel never re-derives day math from another source.
+    # days_missed: ticks in the past without a worked block (V31 blockers);
+    # days_left: ticks still ahead; closeable: V32 "no active dates" holds.
+    days_missed: list[str] | None = None
+    days_left: list[str] | None = None
+    closeable: bool | None = None
 
     @classmethod
     def from_core(
@@ -149,11 +156,22 @@ class TaskDto(BaseModel):
         blocks_done: int | None = None,
         last_worked: str | None = None,
         days_done: int | None = None,
+        days_missed: list[str] | None = None,
+        days_left: list[str] | None = None,
+        closeable: bool | None = None,
     ) -> TaskDto:
         data = to_dict(task)
         # to_dict flattens recurrence without its kind tag; restore it.
         data["recurrence"] = recurrence_to_dict(task.recurrence)
-        return cls(**data, blocks_done=blocks_done, last_worked=last_worked, days_done=days_done)
+        return cls(
+            **data,
+            blocks_done=blocks_done,
+            last_worked=last_worked,
+            days_done=days_done,
+            days_missed=days_missed,
+            days_left=days_left,
+            closeable=closeable,
+        )
 
 
 class SlotDto(BaseModel):

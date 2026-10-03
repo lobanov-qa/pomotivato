@@ -27,6 +27,7 @@ import {
 } from "@/features/kanban/board";
 import {
   useCloneTask,
+  useCloseTask,
   useCreateTask,
   useDeleteTask,
   useFrogId,
@@ -63,6 +64,7 @@ export function KanbanScreen() {
   const create = useCreateTask();
   const remove = useDeleteTask();
   const clone = useCloneTask();
+  const close = useCloseTask();
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [panelId, setPanelId] = useState<string | null>(null); // DF2 card panel
@@ -189,6 +191,18 @@ export function KanbanScreen() {
       setConflictToast(t(message));
       window.setTimeout(() => setConflictToast(null), 5000);
     }
+  }
+
+  /** V32/A35: the §4.7 "Перевести в «Готово»" — the server re-checks; a
+   * refusal (dates gained in another window) comes back as a RU toast. */
+  async function onCloseCard(id: string) {
+    try {
+      await close.mutateAsync(id);
+      setConflictToast(t("task-panel.closed-toast"));
+    } catch {
+      setConflictToast(t("task-panel.close-refused"));
+    }
+    window.setTimeout(() => setConflictToast(null), 5000);
   }
 
   async function onCreate() {
@@ -379,6 +393,7 @@ export function KanbanScreen() {
           task={panelTask}
           parents={tasks}
           sprintDays={repeatDays}
+          today={today()}
           onChange={onFieldChange}
           onDelete={(id) => void onDelete(id)}
           onClone={(id) =>
@@ -386,6 +401,7 @@ export function KanbanScreen() {
               .mutateAsync({ id, cloneId: `task-${crypto.randomUUID().slice(0, 12)}` })
               .catch(() => undefined)
           }
+          onCloseCard={(id) => void onCloseCard(id)}
           onClose={closePanel}
         />
       )}

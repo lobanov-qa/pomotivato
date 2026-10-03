@@ -34,6 +34,12 @@ export interface TaskDto {
   days_done: number | null;
   /** Filter batch: ISO day of the card's last completed block (list only). */
   last_worked: string | null;
+  /** E4c PR 4 (spec 07 §4.7): hint inputs from the same board scan.
+   * days_missed: past ticks without a worked block (V31 blockers);
+   * days_left: ticks still ahead; closeable: V32 "no active dates" holds. */
+  days_missed: string[] | null;
+  days_left: string[] | null;
+  closeable: boolean | null;
   created_at: string;
 }
 
@@ -217,6 +223,8 @@ export const api = {
     request<TaskDto>("PATCH", `/api/tasks/${id}`, changes),
   setTaskStatus: (id: string, to: TaskStatus) =>
     request<TaskDto>("POST", `/api/tasks/${id}/status`, { to }),
+  /** V32/A35: the dialog's "Перевести в «Готово»" — server re-checks. */
+  closeTask: (id: string) => request<TaskDto>("POST", `/api/tasks/${id}/close`),
   deleteTask: (id: string) => request<void>("DELETE", `/api/tasks/${id}`),
 
   /** DF12: duplicate a done card into backlog, lineage kept (spec 06). */

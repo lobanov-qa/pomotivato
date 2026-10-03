@@ -101,6 +101,18 @@ const RU = {
   "review.skip": "Пропустить",
   "review.error": "Оценку не принято. Попробуй ещё раз.",
 
+  // E4c PR 4 (spec 07 §4.7): the card explains its own state in the panel.
+  "task-panel.state-days-left": "Отмечено дней: {total}, отработано {done}. Осталось",
+  "task-panel.state-missed": "Пропущен день",
+  "task-panel.state-missed-blocks":
+    "поработай в этот день или сними метку: пока пропуск есть, карточка не уходит в «Готово»",
+  "task-panel.state-all-worked": "Все запланированные дни отработаны",
+  "task-panel.state-no-days": "Дней не отмечено: карточка закроется после блоков таймера",
+  "task-panel.close-card": "Перевести в «Готово»",
+  "task-panel.day-past-blocked": "Прошедший день отметить нельзя",
+  "task-panel.closed-toast": "Карточка закрыта: все запланированные дни отработаны",
+  "task-panel.close-refused": "Закрыть нельзя: остались дни впереди или неотработанные метки",
+
   "summary.title": "Сводка дня",
   "summary.blocks": "блоков",
   "summary.focus": "фокус",
@@ -226,6 +238,17 @@ export type MessageKey = keyof typeof RU;
 
 const DICTIONARIES: Record<Locale, Record<MessageKey, string>> = { ru: RU };
 
-export function t(key: MessageKey, locale: Locale = "ru"): string {
-  return DICTIONARIES[locale][key];
+/** Params interpolate `{name}` placeholders (E4c PR 4: the §4.7 hints carry
+ * counts); keys without placeholders return untouched, so all existing
+ * call sites stay valid. */
+export function t(
+  key: MessageKey,
+  locale: Locale = "ru",
+  params?: Record<string, string | number>,
+): string {
+  const raw = DICTIONARIES[locale][key];
+  if (!params) return raw;
+  return raw.replace(/\{(\w+)\}/g, (whole, name: string) =>
+    name in params ? String(params[name]) : whole,
+  );
 }

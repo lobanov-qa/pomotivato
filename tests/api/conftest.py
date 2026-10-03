@@ -48,12 +48,13 @@ def call(database: Database) -> Callable[[], AbstractAsyncContextManager[Service
 
     @asynccontextmanager
     async def _open() -> AsyncIterator[Services]:
+        clock = FakeClock(DEFAULT_MOMENT)
         async with database.new_session() as session:
             yield Services(
-                task=TaskService(session),
+                task=TaskService(session, clock),
                 day_plan=DayPlanService(session),
                 settings=SettingsService(session),
-                clock=FakeClock(DEFAULT_MOMENT),
+                clock=clock,
             )
 
     return _open
