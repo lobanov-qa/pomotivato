@@ -1,11 +1,11 @@
 /**
- * Review modal (spec 03 §2 + E4b §3.7): score 1..5 + optional comment for
- * the work block that just closed; STUDY blocks additionally ask for
- * active recall (three facts from memory). The habit reward retired with
- * DF7 (spec 06, author 08.09). The FSM never blocks for a review — the
- * timer keeps running behind the overlay; "Позже" dismisses and the block
- * stays reviewable while the session lives (the modal reopens on the next
- * closed-but-unreviewed segment only).
+ * Review modal (spec 03 §2 + E4b §3.7 + E4c V24): score 1..5 + optional
+ * comment for the work block that just closed; STUDY blocks additionally
+ * ask for active recall (three facts from memory). The habit reward retired
+ * with DF7 (spec 06, author 08.09). The FSM never blocks for a review — the
+ * timer keeps running behind the overlay. "Пропустить" (A18/A39, replaced
+ * the old "Позже" dismissal) posts an explicit score=null: the verdict is
+ * final for this block, the card still walks by V22, stats receive a hole.
  */
 
 import { useState } from "react";
@@ -16,7 +16,7 @@ import { t } from "@/i18n/ru";
 import { cn } from "@/lib/utils";
 
 export interface ReviewPayload {
-  score: number;
+  score: number | null;
   comment?: string;
   recall_notes?: string;
 }
@@ -25,22 +25,21 @@ interface Props {
   taskTitle: string;
   taskType: TaskType;
   onSubmit: (payload: ReviewPayload) => Promise<void>;
-  onDismiss: () => void;
 }
 
-export function ReviewModal({ taskTitle, taskType, onSubmit, onDismiss }: Props) {
+export function ReviewModal({ taskTitle, taskType, onSubmit }: Props) {
   const [score, setScore] = useState<number | null>(null);
   const [comment, setComment] = useState("");
   const [recall, setRecall] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  async function submit(): Promise<void> {
-    if (score === null || submitting) return;
+  async function submit(payload: ReviewPayload): Promise<void> {
+    if (submitting) return;
     setSubmitting(true);
     try {
       await onSubmit({
-        score,
-        comment: comment.trim() || undefined,
+        ...payload,
+        comment: payload.comment ?? (comment.trim() || undefined),
         recall_notes: taskType === "study" ? recall.trim() || undefined : undefined,
       });
     } finally {
@@ -110,13 +109,21 @@ export function ReviewModal({ taskTitle, taskType, onSubmit, onDismiss }: Props)
           className={taskType === "normal" ? "mt-4 text-left" : "mt-2 text-left"}
         />
         <div className="mt-4 flex justify-center gap-2">
-          <Button variant="ghost" data-testid="review.dismiss" onClick={onDismiss}>
-            {t("review.dismiss")}
+          {/* A39 (spec 07 §2.7): skip is a verdict now, not a postponement —
+              it posts score=null and the card walks like on a real score.
+              The old "Позже" (local hide, reopen later) is retired with it. */}
+          <Button
+            variant="ghost"
+            data-testid="review.skip"
+            disabled={submitting}
+            onClick={() => void submit({ score: null })}
+          >
+            {t("review.skip")}
           </Button>
           <Button
             data-testid="review.submit"
             disabled={score === null || submitting}
-            onClick={() => void submit()}
+            onClick={() => score !== null && void submit({ score })}
           >
             {t("review.submit")}
           </Button>

@@ -120,6 +120,7 @@ def test_csv_rows_join_scores_and_keep_open_segment_gaps() -> None:
         id="seg-b", phase=SegmentPhase.BREAK, status=None, ended=False, planned_min=5
     )
     review = review_factory(segment_id=closed.id, score=5)
+    assert review.score is not None  # the CSV map only carries real scores
 
     text = csv_rows((closed, open_break), {review.segment_id: review.score})
 

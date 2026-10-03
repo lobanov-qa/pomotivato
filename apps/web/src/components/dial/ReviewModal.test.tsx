@@ -4,25 +4,17 @@ import { describe, expect, it, vi } from "vitest";
 import { ReviewModal } from "./ReviewModal";
 
 /**
- * The review modal contract (spec 03 §2 + E4b §3.7/3.8): score 1..5 +
- * optional comment, submit disabled until a score is picked, "Позже"
- * dismisses (the FSM never blocks — the timer runs behind the overlay).
- * STUDY grows the active-recall box; NORMAL shows neither (DF7 of
- * shows neither (the modal must not nag).
+ * The review modal contract (spec 03 §2 + E4b §3.7 + E4c V24): score 1..5
+ * + optional comment, submit disabled until a score is picked; "Пропустить"
+ * is a VERDICT, not a dismissal — it sends score=null (A18/A39) and the
+ * card walks exactly like on a real score. STUDY grows the active-recall
+ * box; NORMAL shows neither (DF7 of spec 05: the modal must not nag).
  */
 
 function renderModal(taskType: "normal" | "study" = "normal") {
   const onSubmit = vi.fn().mockResolvedValue(undefined);
-  const onDismiss = vi.fn();
-  render(
-    <ReviewModal
-      taskTitle="Deep work"
-      taskType={taskType}
-      onSubmit={onSubmit}
-      onDismiss={onDismiss}
-    />,
-  );
-  return { onSubmit, onDismiss };
+  render(<ReviewModal taskTitle="Deep work" taskType={taskType} onSubmit={onSubmit} />);
+  return { onSubmit };
 }
 
 describe("ReviewModal", () => {
@@ -80,13 +72,19 @@ describe("ReviewModal", () => {
     expect(onSubmit).toHaveBeenCalledWith({ score: 4, recall_notes: "A, B, C" });
   });
 
-  it("dismiss closes without a score", async () => {
+  it("skip posts the null verdict without a chosen score (V24/A39)", async () => {
     const user = userEvent.setup();
-    const { onDismiss, onSubmit } = renderModal();
+    const { onSubmit } = renderModal();
 
-    await user.click(screen.getByTestId("review.dismiss"));
+    await user.click(screen.getByTestId("review.skip"));
 
-    expect(onDismiss).toHaveBeenCalled();
-    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onSubmit).toHaveBeenCalledWith({ score: null });
+  });
+
+  it("skip is available while no score is picked (it is a verdict, not a delay)", () => {
+    renderModal();
+
+    expect(screen.getByTestId("review.skip")).toBeEnabled();
+    expect(screen.queryByTestId("review.dismiss")).not.toBeInTheDocument();
   });
 });

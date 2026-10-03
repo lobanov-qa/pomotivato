@@ -159,7 +159,8 @@ class SessionService:
             raise NotFoundError(msg)
         timeline = await self._segments.get_many_for_session(session_id)
         reviews = await self._reviews.get_many_for_session(session_id)
-        average = sum(review.score for review in reviews) / len(reviews) if reviews else None
+        scored = [r.score for r in reviews if r.score is not None]  # V24 skips
+        average = sum(scored) / len(scored) if scored else None
         return SessionView(
             session=stored,
             phase=None,

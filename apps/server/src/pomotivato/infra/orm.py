@@ -95,7 +95,8 @@ class ReviewRow(Base):
     __tablename__ = "reviews"
 
     segment_id: Mapped[str] = mapped_column(ForeignKey("segments.id"), primary_key=True)
-    score: Mapped[int] = mapped_column(Integer)
+    # V24 (spec 07 A18): NULL is the explicit skip verdict, not missing data.
+    score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     comment: Mapped[str | None] = mapped_column(Text)
     recall_notes: Mapped[str | None] = mapped_column(Text)
     reward: Mapped[str | None] = mapped_column(Text)

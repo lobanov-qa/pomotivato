@@ -253,7 +253,9 @@ class Session:
 @dataclass(frozen=True, slots=True)
 class Review:
     segment_id: str
-    score: int
+    # V24 (spec 07 A18/A39): None is the explicit "Пропустить" verdict — the
+    # block closes and the card walks, but stats receive no score.
+    score: int | None = None
     comment: str | None = None
     recall_notes: str | None = None
     reward: str | None = None
@@ -512,7 +514,8 @@ def session_from_dict(data: Mapping[str, Any]) -> Session:
 def review_from_dict(data: Mapping[str, Any]) -> Review:
     return Review(
         segment_id=str(_require(data, "segment_id")),
-        score=int(_require(data, "score")),
+        # V24: NULL is the explicit skip verdict; a present value must parse.
+        score=None if data.get("score") is None else int(_require(data, "score")),
         comment=data.get("comment"),
         recall_notes=data.get("recall_notes"),
         reward=data.get("reward"),

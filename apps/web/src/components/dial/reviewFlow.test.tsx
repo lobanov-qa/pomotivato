@@ -6,9 +6,10 @@ import type { SessionDto, TaskDto } from "@/api/client";
 import { FocusScreen } from "./FocusScreen";
 
 /**
- * The review flow on /focus (spec 03 §2): a closed work segment without a
- * review opens the modal; submitting POSTs /api/reviews and the modal
- * closes; "Позже" hides it until the NEXT block closes.
+ * The review flow on /focus (spec 03 §2 + E4c V24): a closed work segment
+ * without a verdict opens the modal; submitting POSTs /api/reviews and the
+ * modal closes; "Пропустить" is a server verdict (score=null) — after it
+ * the block counts as reviewed and the day average stays empty.
  */
 
 class FakeSource {
@@ -146,11 +147,13 @@ beforeEach(() => {
     }
     if (url === "/api/reviews" && init?.method === "POST") {
       reviewBodies.push(String(init.body));
+      const posted = JSON.parse(String(init.body)) as { score: number | null };
       current = session({
-        reviews: [{ segment_id: CLOSED_WORK.id, score: 4, comment: null }],
-        average_score: 4,
+        reviews: [{ segment_id: CLOSED_WORK.id, score: posted.score, comment: null }],
+        // V24: a skipped verdict leaves the day without an average.
+        average_score: posted.score,
       });
-      return json(201, { segment_id: CLOSED_WORK.id, score: 4, comment: null });
+      return json(201, { segment_id: CLOSED_WORK.id, score: posted.score, comment: null });
     }
     if (url.startsWith("/api/sessions/s-1")) return json(200, current);
     if (url.startsWith("/api/summary")) {
@@ -193,11 +196,13 @@ describe("review flow on /focus", () => {
     expect(screen.getByTestId("review.task")).toHaveTextContent("Deep work");
   });
 
-  it("break-time hint card shows after dismissing the review (spec 05 §3.6)", async () => {
+  it("break-time hint card shows after the verdict closes the modal (spec 05 §3.6)", async () => {
     const user = userEvent.setup();
     renderScreen();
+    await screen.findByTestId("review.modal");
 
-    await user.click(await screen.findByTestId("review.dismiss"));
+    await user.click(screen.getByTestId("review.skip"));
+    await waitFor(() => expect(screen.queryByTestId("review.modal")).not.toBeInTheDocument());
 
     const card = await screen.findByTestId("hints.card");
     expect(card).toHaveTextContent("Наука в перерыве");
@@ -221,15 +226,21 @@ describe("review flow on /focus", () => {
     expect(await screen.findByTestId("dial.score-badge")).toHaveTextContent("4");
   });
 
-  it("dismiss hides the modal until the next block closes", async () => {
+  it("skip posts score=null and the verdict closes the modal (V24/A39)", async () => {
     const user = userEvent.setup();
     renderScreen();
     await screen.findByTestId("review.modal");
 
-    await user.click(screen.getByTestId("review.dismiss"));
-    expect(screen.queryByTestId("review.modal")).not.toBeInTheDocument();
+    await user.click(screen.getByTestId("review.skip"));
 
-    // a new phase_changed does NOT reopen it (same pending segment)
+    await waitFor(() => expect(reviewBodies).toHaveLength(1));
+    expect(JSON.parse(reviewBodies[0])).toMatchObject({
+      segment_id: CLOSED_WORK.id,
+      score: null,
+    });
+    await waitFor(() => expect(screen.queryByTestId("review.modal")).not.toBeInTheDocument());
+    // A skipped block is a reviewed block: no average badge, no reopen.
+    expect(screen.queryByTestId("dial.score-badge")).not.toBeInTheDocument();
     FakeSource.instances[0].emit("phase_changed", {
       phase: "work",
       segment_id: "s-1-2",

@@ -110,21 +110,20 @@ export function FocusScreen() {
     [tasks],
   );
 
-  // Review flow (spec 03 §2): a closed work segment with no review opens
-  // the modal; the FSM never waits for it (timer runs behind the overlay).
-  const [dismissed, setDismissed] = useState<string[]>([]);
+  // Review flow (spec 03 §2 + E4c V24): a closed work segment without a
+  // verdict opens the modal; the FSM never waits for it (timer runs behind
+  // the overlay). The old local "later" list is retired: A39 made the skip
+  // an actual server verdict (score=null), so the only exits are 1..5 or
+  // Пропустить — an unscored block keeps its modal until then.
   const pendingReview = useMemo(() => {
     if (!session) return null;
     const reviewed = new Set(session.reviews.map((r) => r.segment_id));
-    const closed = session.timeline.find(
-      (seg) =>
-        seg.phase === "work" &&
-        seg.status === "completed" &&
-        !reviewed.has(seg.id) &&
-        !dismissed.includes(seg.id),
+    return (
+      session.timeline.find(
+        (seg) => seg.phase === "work" && seg.status === "completed" && !reviewed.has(seg.id),
+      ) ?? null
     );
-    return closed ?? null;
-  }, [session, dismissed]);
+  }, [session]);
 
   const reviewError = useMutation({ mutationFn: api.submitReview });
   // Author's law 23.09: the server refuses a plan no «В работе» card backs;
@@ -132,13 +131,12 @@ export function FocusScreen() {
   const [startBlocked, setStartBlocked] = useState(false);
 
   async function submitReview(payload: {
-    score: number;
+    score: number | null;
     comment?: string;
     recall_notes?: string;
   }): Promise<void> {
     if (!pendingReview) return;
     await reviewError.mutateAsync({ segment_id: pendingReview.id, ...payload });
-    setDismissed((ids) => ids.filter((id) => id !== pendingReview.id));
     // The score IS the day's verdict (spec 06 DF9-11): the server walks the
     // card out of «В работе» (planned while repeat days remain, done when the
     // last tick is spent), so the board copy must be pulled again. Without
@@ -328,9 +326,6 @@ export function FocusScreen() {
           taskTitle={titleOf(pendingReview.task_id) || t("dial.phase-work")}
           taskType={typeOf(pendingReview.task_id) ?? "normal"}
           onSubmit={submitReview}
-          onDismiss={() =>
-            setDismissed((ids) => [...ids, pendingReview.id])
-          }
         />
       )}
       {reviewError.isError && (

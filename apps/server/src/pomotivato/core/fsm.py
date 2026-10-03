@@ -257,7 +257,7 @@ class SessionFSM:
     def submit_review(
         self,
         segment_id: str,
-        score: int,
+        score: int | None,
         comment: str | None = None,
         *,
         recall_notes: str | None = None,
@@ -268,7 +268,9 @@ class SessionFSM:
         recall_notes/reward are E4b payload fields (spec 05 §3.7-3.8): the
         active-recall notes of a study block and the habit-loop reward.
         They arrive with the score; the ladder advance (E2) still triggers
-        on the review itself.
+        on the review itself. V24 (spec 07 A18/A39): score=None is the
+        explicit "Пропустить" verdict — the block is reviewed (and the card
+        walks, A39), but the score contributes nothing to the averages.
         """
         live = next((seg for seg in self._segments if seg.seg_id == segment_id), None)
         reviewable = (
@@ -456,9 +458,12 @@ class SessionFSM:
 
     @property
     def average_score(self) -> float | None:
-        if not self._reviews:
+        # V24: skipped verdicts (score=None) stay out of the mean; a day
+        # of only skips has no average at all.
+        scored = [rev.score for rev in self._reviews if rev.score is not None]
+        if not scored:
             return None
-        return sum(rev.score for rev in self._reviews) / len(self._reviews)
+        return sum(scored) / len(scored)
 
     @property
     def session(self) -> Session:

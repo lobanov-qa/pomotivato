@@ -121,7 +121,9 @@ def quadrant_stats(
     tasks: tuple[Task, ...], blocks: tuple[WorkBlock, ...], reviews: tuple[Review, ...]
 ) -> list[dict[str, Any]]:
     """Eisenhower rows: finished tasks, their blocks and mean score."""
-    score_by_segment = {review.segment_id: review.score for review in reviews}
+    score_by_segment = {
+        review.segment_id: review.score for review in reviews if review.score is not None
+    }  # V24: skipped verdicts never enter the mean
     blocks_by_task: dict[str | None, int] = {}
     scores: dict[str, list[int]] = {key: [] for key, _, _ in _QUADRANTS}
     for block in blocks:

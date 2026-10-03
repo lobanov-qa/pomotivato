@@ -93,7 +93,7 @@ export interface SessionDto {
   average_score: number | null;
   settings: SessionSettingsDto;
   timeline: SegmentDto[];
-  reviews: { segment_id: string; score: number; comment: string | null }[];
+  reviews: { segment_id: string; score: number | null; comment: string | null }[];
   /** Frozen slot snapshot (spec 01 v0.3): dial sectors; null = legacy row. */
   slots: SlotDto[] | null;
 }
@@ -261,12 +261,13 @@ export const api = {
 
   submitReview: (body: {
     segment_id: string;
-    score: number;
+    // V24 (spec 07 A18/A39): null is the explicit "Пропустить" verdict.
+    score: number | null;
     comment?: string;
     // E4b (spec 05 §3.7): study active-recall notes (reward retired by DF7).
     recall_notes?: string;
   }) =>
-    request<{ segment_id: string; score: number }>("POST", "/api/reviews", body),
+    request<{ segment_id: string; score: number | null }>("POST", "/api/reviews", body),
 
   getSettings: () => request<SettingsBundleDto>("GET", "/api/settings"),
   putSessionSettings: (settings: SessionSettingsDto) =>
