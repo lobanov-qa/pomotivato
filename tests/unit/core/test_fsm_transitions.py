@@ -344,6 +344,30 @@ def test_review_does_not_block_fsm_and_updates_average():  # T16
 
 
 @pytest.mark.unit
+def test_skip_verdict_reviews_the_block_but_scores_nothing():  # V24/A18
+    """score=None closes the review window for this segment (awaiting_review
+    false, A39: the card still walks) while the mean ignores it entirely."""
+    fsm, clock = make_fsm()
+    fsm.start()
+    advance_min(clock, 25)
+    fsm.advance()
+    work_id = fsm.timeline[0].id
+
+    skipped = fsm.submit_review(work_id, None)
+
+    assert skipped.score is None
+    assert not fsm.awaiting_review
+    assert fsm.average_score is None
+    # a later real score averages alone — the hole never pollutes the mean
+    advance_min(clock, 5)
+    fsm.advance()  # break ends, second work opens
+    advance_min(clock, 25)
+    fsm.advance()
+    fsm.submit_review(fsm.timeline[2].id, 3)
+    assert fsm.average_score == 3.0
+
+
+@pytest.mark.unit
 def test_review_rejects_non_completed_work_segment():  # T17
     fsm, clock = make_fsm()
     fsm.start()

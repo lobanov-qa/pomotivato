@@ -51,14 +51,14 @@ def summarize(
         )
         / 60
     )
-    scores = [review.score for review in reviews]
+    scores = [r.score for r in reviews if r.score is not None]  # V24: skips stay out
     return {
         "date": day.isoformat(),
         "blocks_done": len(done_work),
         "blocks_planned": len(plan.slots) if plan is not None else 0,
         "focus_min": focus_min,
         "average_score": round(sum(scores) / len(scores), 2) if scores else None,
-        "reviews_count": len(scores),
+        "reviews_count": len(reviews),
         "tasks_done": len({segment.task_id for segment in done_work if segment.task_id}),
     }
 

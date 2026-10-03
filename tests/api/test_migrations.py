@@ -165,3 +165,37 @@ def test_carry_choice_check_lands_and_rejects_unknown_fates(tmp_path):
         connection.execute("UPDATE tasks SET carry_choice='left' WHERE id='old'")
     assert "carry_choice" in columns
     assert fate is None  # pre-fate rows load undecided, per spec 07 §3.3 p.3
+
+
+@pytest.mark.api
+def test_score_becomes_nullable_without_losing_existing_scores(tmp_path):
+    """E4c PR 3 hop (V24): the batch rewrite keeps rows, drops NOT NULL."""
+    path = tmp_path / "score-null-test.db"
+    upgrade_db(path, "9d41c07be3f8")
+    with sqlite3.connect(path) as connection:
+        connection.execute(
+            "INSERT INTO sessions (id, day_plan_id, state, settings_json)"
+            " VALUES ('s-1', 'p-1', 'stopped', '{}')"
+        )
+        connection.execute(
+            "INSERT INTO segments (id, session_id, phase, planned_min, status)"
+            " VALUES ('g-1', 's-1', 'work', 25, 'completed')"
+        )
+        connection.execute("INSERT INTO reviews (segment_id, score) VALUES ('g-1', 4)")
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute("INSERT INTO reviews (segment_id, score) VALUES ('g-2', NULL)")
+
+    upgrade_db(path, HEAD)
+
+    with sqlite3.connect(path) as connection:
+        kept = connection.execute("SELECT score FROM reviews WHERE segment_id='g-1'").fetchone()[0]
+        connection.execute(
+            "INSERT INTO segments (id, session_id, phase, planned_min, status)"
+            " VALUES ('g-2', 's-1', 'work', 25, 'completed')"
+        )
+        connection.execute("INSERT INTO reviews (segment_id, score) VALUES ('g-2', NULL)")
+        skipped = connection.execute("SELECT score FROM reviews WHERE segment_id='g-2'").fetchone()[
+            0
+        ]
+    assert kept == 4
+    assert skipped is None

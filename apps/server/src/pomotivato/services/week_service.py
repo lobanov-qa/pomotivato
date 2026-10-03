@@ -67,7 +67,10 @@ class WeekService:
                 if segment.started_at is not None and start <= segment.started_at.date() <= end:
                     segments.append(segment)
             for review in await self._reviews.get_many_for_session(model.id):
-                scores[review.segment_id] = review.score
+                # V24: a skipped verdict carries no score — the week math and
+                # the last_score badge treat it like a block never scored.
+                if review.score is not None:
+                    scores[review.segment_id] = review.score
         return completed_work_blocks(tuple(segments)), scores
 
 

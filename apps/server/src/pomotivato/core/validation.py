@@ -113,9 +113,9 @@ def validate_recurrence(rec: Recurrence) -> None:
 
 
 def validate_review(review: Review) -> None:
-    """Check V4: score within 1..5."""
-    if review.score not in _SCORE_RANGE:
-        msg = f"score must be 1..5, got {review.score}"
+    """Check V4/V24: score is NULL (skipped, spec 07 A18) or within 1..5."""
+    if review.score is not None and review.score not in _SCORE_RANGE:
+        msg = f"score must be 1..5 or null, got {review.score}"
         raise ReviewValidationError(msg)
 
 

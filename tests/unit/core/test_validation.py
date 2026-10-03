@@ -112,12 +112,13 @@ def test_weekly_count_raises_when_start_is_unreasonable():
 @pytest.mark.unit
 @pytest.mark.parametrize(
     "score",
-    [0, 1, 5, 6, -1],
-    ids=["zero-bad", "one-ok", "five-ok", "six-bad", "neg-bad"],
+    [None, 0, 1, 5, 6, -1],
+    ids=["skip-ok", "zero-bad", "one-ok", "five-ok", "six-bad", "neg-bad"],
 )
 def test_review_score_gate(score):
+    """V4/V24: 1..5 or the explicit None skip verdict (spec 07 A18)."""
     review = review_factory(score=score)
-    if score in (1, 5):
+    if score is None or score in (1, 5):
         validate_review(review)
     else:
         with pytest.raises(ReviewValidationError, match="score must be 1..5"):

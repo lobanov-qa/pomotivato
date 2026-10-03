@@ -127,7 +127,11 @@ class ExportService:
         for model in await self._sessions.list_all():
             segments += list(await self._segments.get_many_for_session(model.id))
             reviews += list(await self._reviews.get_many_for_session(model.id))
-        scores = {review.segment_id: review.score for review in reviews}
+        scores = {
+            review.segment_id: review.score
+            for review in reviews
+            if review.score is not None  # V24: skips export as empty score cells
+        }
 
         def in_period(segment: Segment) -> bool:
             return segment.started_at is not None and start <= segment.started_at.date() <= end

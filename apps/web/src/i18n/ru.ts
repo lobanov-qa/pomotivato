@@ -98,7 +98,7 @@ const RU = {
   "review.scale-max": "в потоке",
   "review.comment-placeholder": "Комментарий (необязательно)",
   "review.submit": "Сохранить",
-  "review.dismiss": "Позже",
+  "review.skip": "Пропустить",
   "review.error": "Оценку не принято. Попробуй ещё раз.",
 
   "summary.title": "Сводка дня",

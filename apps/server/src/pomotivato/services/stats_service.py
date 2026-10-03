@@ -53,14 +53,16 @@ class StatsService:
         period_blocks = tuple(b for b in blocks if start <= b.day <= end)
         period_ids = {b.segment_id for b in period_blocks}
         period_reviews = tuple(r for r in reviews if r.segment_id in period_ids)
-        scores = [review.score for review in period_reviews]
+        # V24: skipped verdicts (score=None) are counted as reviews but stay
+        # out of the mean — the same law as fsm.average_score.
+        scores = [r.score for r in period_reviews if r.score is not None]
         return {
             "period": {"from": start.isoformat(), "to": end.isoformat()},
             "totals": {
                 "blocks_done": len(period_blocks),
                 "focus_min": sum(b.minutes for b in period_blocks),
                 "average_score": round(sum(scores) / len(scores), 2) if scores else None,
-                "reviews_count": len(scores),
+                "reviews_count": len(period_reviews),
                 "tasks_done": sum(1 for t in tasks if t.status is TaskStatus.DONE),
                 "tasks_total": len(tasks),
             },

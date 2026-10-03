@@ -179,6 +179,27 @@ def test_review_accepted_when_work_completed(http_session):
 
 
 @pytest.mark.api
+def test_skip_verdict_is_accepted_as_null_and_stays_out_of_the_mean(http_session):
+    """V24/A18 (E4c PR 3): score=null is a real review — 201, persisted,
+    counted, but the average ignores it; the window closes (A39: the card
+    walks exactly like on a score, so the block never reopens)."""
+    client, clock = http_session
+    session_id = _start(client, FAST)["id"]
+    clock.advance(timedelta(minutes=10))
+    segment_id = client.get(f"/api/sessions/{session_id}").json()["timeline"][0]["id"]
+
+    created = client.post("/api/reviews", json={"segment_id": segment_id, "score": None})
+
+    assert created.status_code == HTTPStatus.CREATED
+    assert created.json()["score"] is None
+    view = client.get(f"/api/sessions/{session_id}").json()
+    assert [r["score"] for r in view["reviews"]] == [None]
+    assert view["average_score"] is None
+    again = client.post("/api/reviews", json={"segment_id": segment_id, "score": 3})
+    assert again.status_code == HTTPStatus.CONFLICT  # T17 still holds for skips
+
+
+@pytest.mark.api
 def test_study_review_advances_repetition_queue_when_due(http_session, tmp_path):
     client, clock = http_session
     client.post("/api/tasks", json={"id": "t-study", "title": "Learn", "type": "study"})

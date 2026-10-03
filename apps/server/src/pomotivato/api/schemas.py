@@ -229,7 +229,8 @@ class SegmentDto(BaseModel):
 
 class ReviewDto(BaseModel):
     segment_id: str
-    score: int
+    # V24 (spec 07 A18): null is the explicit "Пропустить" verdict.
+    score: int | None
     comment: str | None = None
     recall_notes: str | None = None
     reward: str | None = None
@@ -241,7 +242,9 @@ class ReviewDto(BaseModel):
 
 class ReviewCreateDto(BaseModel):
     segment_id: str
-    score: int
+    # V24: null means "Пропустить" (the card still walks, A39). The 1..5
+    # range check lives in core validate_review (V4/V24), not here.
+    score: int | None = None
     comment: str | None = None
     # E4b payload (spec 05 §3.7-3.8): active-recall notes, habit reward.
     recall_notes: str | None = None

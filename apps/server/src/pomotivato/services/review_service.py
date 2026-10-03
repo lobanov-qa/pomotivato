@@ -46,12 +46,16 @@ class ReviewService:
     async def submit(
         self,
         segment_id: str,
-        score: int,
+        score: int | None,
         comment: str | None = None,
         *,
         recall_notes: str | None = None,
         reward: str | None = None,
     ) -> Review:
+        """V24/A39 (spec 07): score=None is the explicit skip verdict — the
+        block closes, the card walks (_auto_move_after_review sees it the
+        same), the repetition ladder still advances; only the mean stays
+        untouched."""
         segment = await self._segments.get(segment_id)
         if segment is None:
             msg = f"segment {segment_id!r} not found"
