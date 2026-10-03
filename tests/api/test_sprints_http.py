@@ -91,7 +91,11 @@ def test_completed_sprint_is_no_longer_overlap_exempt(http_app: TestClient) -> N
 
 
 @pytest.mark.api
-def test_only_one_active_sprint_at_a_time(http_app: TestClient) -> None:
+def test_several_sprints_can_be_active_together_when_a25_lifts_the_guard(
+    http_app: TestClient,
+) -> None:
+    """ADR-0005/A25 (E4c PR 2): the "≤1 active" invariant is gone; the
+    non-overlapping periods keep the current sprint unique instead."""
     first = post_sprint(http_app, "2026-09-03", "2026-09-07")
     second = post_sprint(http_app, "2026-09-08", "2026-09-14")
     assert (
@@ -99,30 +103,43 @@ def test_only_one_active_sprint_at_a_time(http_app: TestClient) -> None:
         == HTTPStatus.OK
     )
 
-    clash = http_app.patch(f"/api/sprints/{second['id']}", json={"status": "active"})
+    activated = http_app.patch(f"/api/sprints/{second['id']}", json={"status": "active"})
 
-    assert clash.status_code == HTTPStatus.CONFLICT
-    assert "already active" in clash.json()["detail"]["message"]
-    fresh = http_app.get("/api/sprints").json()
-    statuses = {item["id"]: item["status"] for item in fresh}
-    assert statuses[second["id"]] == "planned"  # rejected patch stuck nothing
+    assert activated.status_code == HTTPStatus.OK
+    fresh = {item["id"]: item for item in http_app.get("/api/sprints").json()}
+    assert fresh[first["id"]]["status"] == "active"
+    assert fresh[second["id"]]["status"] == "active"
+    # Exactly one carries the date (the band never shows two "current").
+    currents = [item for item in fresh.values() if item["is_current"]]
+    assert [c["id"] for c in currents] == [first["id"]]
 
 
 @pytest.mark.api
-def test_patch_edits_texts_and_period_and_revalidates(http_app: TestClient) -> None:
+def test_active_period_freezes_and_completed_is_read_only(http_app: TestClient) -> None:
+    """E4c PR 2 (4.1 status table): after activation the period stops moving;
+    a completed container answers edits with 409, deletes stay allowed."""
     created = post_sprint(http_app, "2026-09-03", "2026-09-07", goal="ship E4b")
-
     edited = http_app.patch(
         f"/api/sprints/{created['id']}",
         json={"name": "sprint 36", "goal": "ship E4b+UX", "end_date": "2026-09-09"},
     )
-
     body = edited.json()
     assert body["name"] == "sprint 36"
     assert body["goal"] == "ship E4b+UX"
     assert body["end_date"] == "2026-09-09"
     too_long = http_app.patch(f"/api/sprints/{created['id']}", json={"end_date": "2026-09-30"})
     assert too_long.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+
+    http_app.patch(f"/api/sprints/{created['id']}", json={"status": "active"})
+    frozen = http_app.patch(f"/api/sprints/{created['id']}", json={"end_date": "2026-09-04"})
+    assert frozen.status_code == HTTPStatus.CONFLICT
+    texts_ok = http_app.patch(f"/api/sprints/{created['id']}", json={"goal": "still editable"})
+    assert texts_ok.status_code == HTTPStatus.OK
+
+    closed = http_app.patch(f"/api/sprints/{created['id']}", json={"status": "completed"})
+    assert closed.status_code == HTTPStatus.OK  # no cards: no fate gate
+    read_only = http_app.patch(f"/api/sprints/{created['id']}", json={"goal": "no more"})
+    assert read_only.status_code == HTTPStatus.CONFLICT
 
 
 @pytest.mark.api

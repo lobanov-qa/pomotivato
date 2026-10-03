@@ -63,6 +63,7 @@ def _task_to_row(task: Task) -> TaskRow:
         cloned_from=task.cloned_from,
         no_timer=task.no_timer,
         sprint_id=task.sprint_id,
+        carry_choice=None if task.carry_choice is None else task.carry_choice.value,
         created_at=task.created_at.isoformat(),
     )
 
@@ -85,6 +86,7 @@ def _task_from_row(row: TaskRow) -> Task:
         "cloned_from": row.cloned_from,
         "no_timer": bool(row.no_timer),
         "sprint_id": row.sprint_id,
+        "carry_choice": row.carry_choice,
         "created_at": row.created_at,
     }
     return task_from_dict(data)
@@ -137,6 +139,63 @@ class TaskRepository:
             stmt = stmt.where(TaskRow.sprint_id == sprint_id)
         rows = await self._session.scalars(stmt)
         return tuple(_task_from_row(row) for row in rows)
+
+    async def list_in_sprint(self, sprint_id: str) -> tuple[Task, ...]:
+        """Every card of one container, done/archived included (V29 sweep)."""
+        rows = await self._session.scalars(
+            select(TaskRow)
+            .where(TaskRow.sprint_id == sprint_id)
+            .order_by(TaskRow.created_at, TaskRow.id)
+        )
+        return tuple(_task_from_row(row) for row in rows)
+
+    def _counts_by_sprint(self, *, fate_open: bool) -> Any:
+        """Grouped unfinished-card counts per sprint (spec 07 §6 enrichment).
+
+        Unfinished = anything but done/archived; fate_open narrows to cards
+        whose carry_choice is still NULL — the "!" badge (A40/V34).
+        """
+        stmt = (
+            select(TaskRow.sprint_id, func.count())
+            .where(
+                TaskRow.sprint_id.is_not(None),
+                TaskRow.status.not_in([TaskStatus.DONE.value, TaskStatus.ARCHIVED.value]),
+            )
+            .group_by(TaskRow.sprint_id)
+        )
+        if fate_open:
+            stmt = stmt.where(TaskRow.carry_choice.is_(None))
+        return stmt
+
+    async def unfinished_by_sprint(self) -> dict[str, int]:
+        rows = await self._session.execute(self._counts_by_sprint(fate_open=False))
+        return {sprint_id: count for sprint_id, count in rows.all() if sprint_id}
+
+    async def carry_pending_by_sprint(self) -> dict[str, int]:
+        rows = await self._session.execute(self._counts_by_sprint(fate_open=True))
+        return {sprint_id: count for sprint_id, count in rows.all() if sprint_id}
+
+    async def count_carry_pending(self, sprint_id: str) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(TaskRow)
+            .where(
+                TaskRow.sprint_id == sprint_id,
+                TaskRow.status.not_in([TaskStatus.DONE.value, TaskStatus.ARCHIVED.value]),
+                TaskRow.carry_choice.is_(None),
+            )
+        )
+        return int(await self._session.scalar(stmt) or 0)
+
+    async def nullify_children_of(self, parent_ids: frozenset[str]) -> None:
+        """V29 step 3: children outliving the sweep must not dangle on FK."""
+        if not parent_ids:
+            return
+        await self._session.execute(
+            sa_update(TaskRow)
+            .where(TaskRow.parent_id.in_(sorted(parent_ids)))
+            .values(parent_id=None)
+        )
 
     async def list_all(self) -> tuple[Task, ...]:
         """All tasks (dashboard scans are desktop-scale, spec 04 §4)."""
@@ -310,10 +369,22 @@ class SprintRepository:
         row = await self._session.get(SprintRow, sprint_id)
         return None if row is None else _sprint_from_row(row)
 
-    async def list(self) -> tuple[Sprint, ...]:
+    async def delete(self, sprint_id: str) -> None:
+        """V29: the row itself; task sweep runs in the service first."""
+        row = await self._session.get(SprintRow, sprint_id)
+        if row is not None:
+            await self._session.delete(row)
+
+    async def list(self, status: SprintStatus | None = None) -> tuple[Sprint, ...]:
         stmt = select(SprintRow).order_by(SprintRow.number.desc())
+        if status is not None:
+            stmt = stmt.where(SprintRow.status == status.value)
         rows = await self._session.scalars(stmt)
         return tuple(_sprint_from_row(row) for row in rows)
+
+    async def mark_completed(self, sprint: Sprint) -> None:
+        """5.4 lazy auto-close: direct write, V15 checked by the caller."""
+        await self.put(replace(sprint, status=SprintStatus.COMPLETED))
 
     async def max_number(self) -> int:
         stmt = select(func.max(SprintRow.number))

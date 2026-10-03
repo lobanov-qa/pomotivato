@@ -230,6 +230,17 @@ def validate_sprint_forward(sprint: Sprint, today: date) -> None:
         raise SprintWindowError(msg)
 
 
+def validate_sprint_activation_window(sprint: Sprint, today: date) -> None:
+    """V20 (spec 07 §5, A12): activate only while a date is still ahead.
+
+    A planned sprint whose end_date already passed is history: the lazy
+    auto-close (5.4) would immediately complete it, so activation is refused.
+    """
+    if sprint.end_date < today:
+        msg = f"sprint {sprint.number} has no upcoming dates (ended {sprint.end_date})"
+        raise SprintWindowError(msg)
+
+
 def validate_task_sprint_membership(task: Task, sprint: Sprint) -> None:
     """V19/V28 (spec 07 §5): the card fits its sprint container.
 
