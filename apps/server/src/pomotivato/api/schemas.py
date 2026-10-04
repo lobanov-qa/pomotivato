@@ -377,6 +377,8 @@ class UiSettingsDto(BaseModel):
     wet_hints: bool = True
     # V26 (spec 07 §4.6): cards visible in «Готово» per scope, rest archived.
     done_visible_limit: int = Field(default=10, ge=0, le=30)
+    # A21 (spec 07 §8): the timer sound switch, on by default.
+    sound_enabled: bool = True
 
 
 class SettingsBundleDto(BaseModel):

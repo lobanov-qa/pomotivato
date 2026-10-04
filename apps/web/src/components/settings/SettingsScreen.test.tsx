@@ -27,6 +27,7 @@ const SETTINGS = {
     require_science_fields: false,
     wet_hints: true,
     done_visible_limit: 10,
+    sound_enabled: true,
   },
 };
 
@@ -101,6 +102,22 @@ describe("SettingsScreen", () => {
     await waitFor(() => expect(puts).toHaveLength(2));
     const uiPut = puts.find((p) => p.url === "/api/settings/ui");
     expect(uiPut?.body).toMatchObject({ done_visible_limit: 30 });
+  });
+
+  it("the A21 sound switch flips and rides the ui PUT", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByTestId("settings.field-work_min");
+
+    const toggle = screen.getByTestId("settings.switch-sound");
+    expect(toggle).toHaveAttribute("aria-checked", "true"); // default on (A21)
+
+    await user.click(toggle);
+    await user.click(screen.getByTestId("settings.save"));
+
+    await waitFor(() => expect(puts).toHaveLength(2));
+    const uiPut = puts.find((p) => p.url === "/api/settings/ui");
+    expect(uiPut?.body).toMatchObject({ sound_enabled: false });
   });
 
   it("enables save after an edit and PUTs both keys", async () => {

@@ -29,6 +29,7 @@ async def get_settings(session: DbSession) -> SettingsBundleDto:
             require_science_fields=ui.require_science_fields,
             wet_hints=ui.wet_hints,
             done_visible_limit=ui.done_visible_limit,
+            sound_enabled=ui.sound_enabled,
         ),
     )
 
@@ -50,5 +51,6 @@ async def put_ui_settings(dto: UiSettingsDto, session: DbSession) -> UiSettingsD
         dto.require_science_fields,
         dto.wet_hints,
         dto.done_visible_limit,
+        dto.sound_enabled,
     )
     return dto
