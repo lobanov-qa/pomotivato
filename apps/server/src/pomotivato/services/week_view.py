@@ -31,9 +31,13 @@ def week_projection(
 ) -> dict[str, Any]:
     """Project one [start, start+days) window into week-view items."""
     tasks_by_id = {task.id: task for task in tasks}
+    # A24 (spec 07 §4.1.2): the sprint screen is sprint-bound — shelf cards
+    # never appear as rows and their work never enters a day summary; slots
+    # of DELETED cards stay as the honest "(deleted)" placeholder.
+    scoped = tuple(task for task in tasks if task.sprint_id is not None)
     recurring = tuple(
         task
-        for task in tasks
+        for task in scoped
         if not isinstance(task.recurrence, Once)
         and task.status in ACTIVE_STATUSES
         and not task.no_timer  # DF13: errands don't appear as day work
@@ -58,7 +62,11 @@ def _past_day(
     scores: Mapping[str, int],
     tasks_by_id: dict[str, Task],
 ) -> dict[str, Any]:
-    day_blocks = tuple(block for block in blocks if block.day == day)
+    hidden = _shelf_ids(tasks_by_id)
+    day_blocks = tuple(
+        block for block in blocks if block.day == day and block.task_id not in hidden
+    )
+    plan_slots = tuple(slot for slot in slots if slot.task_id not in hidden)
     scored = [scores[block.segment_id] for block in day_blocks if block.segment_id in scores]
     # Blocks arrive in session order, so the last scored block per task is
     # simply the freshest review that day.
@@ -82,12 +90,14 @@ def _past_day(
                 "sector": slot.sector,
                 "task_id": slot.task_id,
                 "task_title": _title(tasks_by_id.get(slot.task_id)),
-                "status": tasks_by_id[slot.task_id].status.value
-                if slot.task_id in tasks_by_id
-                else "deleted",
+                "status": (
+                    tasks_by_id[slot.task_id].status.value
+                    if slot.task_id in tasks_by_id
+                    else "deleted"
+                ),
                 "last_score": last_score_by_task.get(slot.task_id),
             }
-            for slot in slots
+            for slot in plan_slots
         ],
         "volume": len(day_blocks),
     }
@@ -99,7 +109,9 @@ def _future_day(
     recurring: tuple[Task, ...],
     tasks_by_id: dict[str, Task],
 ) -> dict[str, Any]:
-    already = {slot.task_id for slot in slots}
+    hidden = _shelf_ids(tasks_by_id)
+    owned_slots = tuple(slot for slot in slots if slot.task_id not in hidden)
+    already = {slot.task_id for slot in owned_slots}
     planned = [
         {"task_id": task.id, "title": task.title, "type": task.type.value}
         for task in recurring
@@ -117,16 +129,23 @@ def _future_day(
                 "sector": slot.sector,
                 "task_id": slot.task_id,
                 "task_title": _title(tasks_by_id.get(slot.task_id)),
-                "status": tasks_by_id[slot.task_id].status.value
-                if slot.task_id in tasks_by_id
-                else "deleted",
+                "status": (
+                    tasks_by_id[slot.task_id].status.value
+                    if slot.task_id in tasks_by_id
+                    else "deleted"
+                ),
                 "last_score": None,
             }
-            for slot in slots
+            for slot in owned_slots
         ],
-        "slots_count": len(slots),
-        "volume": len(planned) + len(slots),
+        "slots_count": len(owned_slots),
+        "volume": len(planned) + len(owned_slots),
     }
+
+
+def _shelf_ids(tasks_by_id: Mapping[str, Task]) -> frozenset[str]:
+    """A24: known cards without an owner; unknown ids stay (deleted rows)."""
+    return frozenset(task.id for task in tasks_by_id.values() if task.sprint_id is None)
 
 
 def _title(task: Task | None) -> str:

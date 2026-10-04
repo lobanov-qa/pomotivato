@@ -79,6 +79,17 @@ class ZombieItemDto(BaseModel):
     days_stuck: int
 
 
+class MissedDaysDto(BaseModel):
+    """Spec 07 §4.5: missed sprint-card day TICKS inside the period.
+
+    `count` = missed days total, `cards` = how many sprint cards own them;
+    server-computed (E3: the client never counts).
+    """
+
+    count: int
+    cards: int
+
+
 class ZombiesDto(BaseModel):
     count: int
     items: list[ZombieItemDto]
@@ -96,6 +107,8 @@ class StatsDto(BaseModel):
     goal_depth: list[GoalDepthRowDto]
     parents: list[ParentProgressDto]
     zombies: ZombiesDto
+    # E4c PR 9 (additive, spec 07 §4.5): the day-marks metric.
+    missed_days: MissedDaysDto
 
 
 class DaySummaryDto(BaseModel):

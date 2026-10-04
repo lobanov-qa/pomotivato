@@ -177,6 +177,7 @@ const RU = {
   "stats.export-csv": "Скачать CSV",
   "stats.empty": "Данных пока мало — поработай несколько дней и вернись ♪",
   "stats.widget-heatmap": "Тепловая карта",
+  "stats.missed-days": "Пропущенные дни",
   "stats.widget-streak": "Серии",
   "stats.streak-current": "сейчас",
   "stats.streak-record": "рекорд",

@@ -150,7 +150,9 @@ class TestStreaks:
 
 class TestEstimateVsFact:
     def test_ratio_is_actual_over_estimate_over_matched_tasks(self) -> None:
-        planned = task_factory(id="t-1", status=TaskStatus.DONE, estimate_blocks=2)
+        planned = task_factory(
+            sprint_id="s-fix", id="t-1", status=TaskStatus.DONE, estimate_blocks=2
+        )
         segs = (work_block("t-1"), work_block("t-1"), work_block("t-1"))
 
         result = estimate_vs_fact((planned,), completed_work_blocks(segs))
@@ -161,7 +163,9 @@ class TestEstimateVsFact:
         ]
 
     def test_excludes_done_task_without_actual_blocks(self) -> None:
-        orphan = task_factory(id="t-2", status=TaskStatus.DONE, estimate_blocks=4)
+        orphan = task_factory(
+            sprint_id="s-fix", id="t-2", status=TaskStatus.DONE, estimate_blocks=4
+        )
 
         result = estimate_vs_fact((orphan,), ())
 
@@ -169,7 +173,9 @@ class TestEstimateVsFact:
         assert result["points"] == []
 
     def test_excludes_not_done_tasks(self) -> None:
-        backlog = task_factory(id="t-3", status=TaskStatus.BACKLOG, estimate_blocks=2)
+        backlog = task_factory(
+            sprint_id="s-fix", id="t-3", status=TaskStatus.BACKLOG, estimate_blocks=2
+        )
         segs = (work_block("t-3"), work_block("t-3"))
 
         result = estimate_vs_fact((backlog,), completed_work_blocks(segs))
@@ -179,10 +185,18 @@ class TestEstimateVsFact:
 
 class TestQuadrants:
     def test_buckets_tasks_by_important_and_urgent(self) -> None:
-        q1 = task_factory(id="t-1", important=True, urgent=True, status=TaskStatus.DONE)
-        q2 = task_factory(id="t-2", important=True, urgent=False, status=TaskStatus.DONE)
-        q3 = task_factory(id="t-3", important=False, urgent=True, status=TaskStatus.DONE)
-        q4 = task_factory(id="t-4", important=False, urgent=False, status=TaskStatus.DONE)
+        q1 = task_factory(
+            sprint_id="s-fix", id="t-1", important=True, urgent=True, status=TaskStatus.DONE
+        )
+        q2 = task_factory(
+            sprint_id="s-fix", id="t-2", important=True, urgent=False, status=TaskStatus.DONE
+        )
+        q3 = task_factory(
+            sprint_id="s-fix", id="t-3", important=False, urgent=True, status=TaskStatus.DONE
+        )
+        q4 = task_factory(
+            sprint_id="s-fix", id="t-4", important=False, urgent=False, status=TaskStatus.DONE
+        )
         segs = tuple(work_block(t.id) for t in (q1, q2, q3, q4))
         blocks = completed_work_blocks(segs)
         reviews = tuple(review_for(seg, score=i + 1) for i, seg in enumerate(segs))
@@ -212,7 +226,9 @@ class TestGoalDepth:
     def test_counts_tasks_by_number_of_scientific_fields(self, filled: int) -> None:
         fields = ["done_criteria", "benefit", "when_then"][:filled]
         task = task_factory(
-            status=TaskStatus.DONE, **{f: f"value-{i}" for i, f in enumerate(fields)}
+            sprint_id="s-fix",
+            status=TaskStatus.DONE,
+            **{f: f"value-{i}" for i, f in enumerate(fields)},
         )
 
         rows = goal_depth((task,))
@@ -221,7 +237,7 @@ class TestGoalDepth:
         assert rows[filled]["done_ratio"] == 1.0
 
     def test_archived_tasks_excluded_from_sample(self) -> None:
-        archived = task_factory(status=TaskStatus.ARCHIVED)
+        archived = task_factory(sprint_id="s-fix", status=TaskStatus.ARCHIVED)
 
         rows = goal_depth((archived,))
 
@@ -230,9 +246,11 @@ class TestGoalDepth:
 
 class TestParentProgress:
     def test_reports_done_over_total_children(self) -> None:
-        parent = task_factory(id="p-1")
-        done = task_factory(id="c-1", parent_id="p-1", status=TaskStatus.DONE)
-        open_child = task_factory(id="c-2", parent_id="p-1", status=TaskStatus.DOING)
+        parent = task_factory(sprint_id="s-fix", id="p-1")
+        done = task_factory(sprint_id="s-fix", id="c-1", parent_id="p-1", status=TaskStatus.DONE)
+        open_child = task_factory(
+            sprint_id="s-fix", id="c-2", parent_id="p-1", status=TaskStatus.DOING
+        )
 
         rows = parent_progress((parent, done, open_child))
 
@@ -241,19 +259,23 @@ class TestParentProgress:
         ]
 
     def test_no_children_means_no_rows(self) -> None:
-        lone = task_factory()
+        lone = task_factory(
+            sprint_id="s-fix",
+        )
 
         assert parent_progress((lone,)) == []
 
     def test_child_of_deleted_parent_is_skipped(self) -> None:
-        ghost_child = task_factory(id="c-1", parent_id="gone", status=TaskStatus.DONE)
+        ghost_child = task_factory(
+            sprint_id="s-fix", id="c-1", parent_id="gone", status=TaskStatus.DONE
+        )
 
         assert parent_progress((ghost_child,)) == []
 
 
 class TestZombies:
     def test_flags_doing_task_idle_beyond_threshold(self) -> None:
-        stuck = task_factory(id="t-1", status=TaskStatus.DOING)
+        stuck = task_factory(sprint_id="s-fix", id="t-1", status=TaskStatus.DOING)
         last_done = completed_work_blocks((work_block("t-1", day=MONDAY - timedelta(days=5)),))
         now = _dt(MONDAY, hour=18)
 
@@ -263,7 +285,7 @@ class TestZombies:
         assert result["items"] == [{"task_id": "t-1", "title": stuck.title, "days_stuck": 5}]
 
     def test_recent_block_keeps_task_alive(self) -> None:
-        alive = task_factory(id="t-1", status=TaskStatus.DOING)
+        alive = task_factory(sprint_id="s-fix", id="t-1", status=TaskStatus.DOING)
         recent = completed_work_blocks((work_block("t-1", day=MONDAY - timedelta(days=1)),))
 
         result = zombies((alive,), recent, now=_dt(MONDAY), threshold_days=3)
@@ -272,7 +294,10 @@ class TestZombies:
 
     def test_doing_task_without_blocks_falls_back_to_created_at(self) -> None:
         fresh = task_factory(
-            id="t-1", status=TaskStatus.DOING, created_at=_dt(MONDAY) - timedelta(days=10)
+            sprint_id="s-fix",
+            id="t-1",
+            status=TaskStatus.DOING,
+            created_at=_dt(MONDAY) - timedelta(days=10),
         )
 
         result = zombies((fresh,), (), now=_dt(MONDAY), threshold_days=3)
@@ -282,7 +307,10 @@ class TestZombies:
 
     def test_ignores_statuses_other_than_doing(self) -> None:
         planned = task_factory(
-            id="t-1", status=TaskStatus.PLANNED, created_at=_dt(MONDAY) - timedelta(days=10)
+            sprint_id="s-fix",
+            id="t-1",
+            status=TaskStatus.PLANNED,
+            created_at=_dt(MONDAY) - timedelta(days=10),
         )
 
         assert zombies((planned,), (), now=_dt(MONDAY), threshold_days=3)["count"] == 0

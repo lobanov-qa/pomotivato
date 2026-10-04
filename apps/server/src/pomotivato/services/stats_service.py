@@ -27,6 +27,8 @@ from pomotivato.services.stats import (
     estimate_vs_fact,
     goal_depth,
     heatmap_rows,
+    in_stats_scope,
+    missed_days_stats,
     parent_progress,
     quadrant_stats,
     streaks,
@@ -49,7 +51,11 @@ class StatsService:
     async def get(self, start: date, end: date, now: datetime) -> dict[str, Any]:
         """Return the spec 04 §4.1 snapshot for [start, end]."""
         _validate_period(start, end)
-        tasks, blocks, reviews = await self._load()
+        all_tasks, blocks, reviews = await self._load()
+        # A24 (spec 07 §10.13): every aggregate reads through the sprint
+        # filter; the full catalog stays out — sessions and segments are
+        # complete rows, task math is not the sandbox's.
+        tasks = in_stats_scope(all_tasks)
         period_blocks = tuple(b for b in blocks if start <= b.day <= end)
         period_ids = {b.segment_id for b in period_blocks}
         period_reviews = tuple(r for r in reviews if r.segment_id in period_ids)
@@ -73,6 +79,11 @@ class StatsService:
             "goal_depth": goal_depth(tasks),
             "parents": parent_progress(tasks),
             "zombies": zombies(tasks, blocks, now=now, threshold_days=DEFAULT_ZOMBIE_DAYS),
+            # Spec 07 §4.5: missed sprint-card day ticks inside the period
+            # (server-computed — the client never does arithmetic, E3 law).
+            "missed_days": missed_days_stats(
+                all_tasks, blocks, start=start, end=end, today=now.date()
+            ),
         }
 
     async def _load(

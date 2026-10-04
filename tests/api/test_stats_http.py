@@ -28,6 +28,8 @@ FAST = {
     "auto_start_next": True,
 }
 
+DAY = DEFAULT_MOMENT.date().isoformat()
+
 PERIOD = {
     "from": DEFAULT_MOMENT.date().isoformat(),
     "to": DEFAULT_MOMENT.date().isoformat(),
@@ -41,8 +43,18 @@ def http_app(tmp_path: Path) -> Iterator[tuple[TestClient, FakeClock]]:
     clock = FakeClock(DEFAULT_MOMENT)
     app.state.clock = clock
     with TestClient(app) as client:
-        client.post("/api/tasks", json={"id": "t-1", "title": "First block"})
-        client.post("/api/tasks", json={"id": "t-2", "title": "Second block"})
+        # E4c PR 9 (A24): aggregates read sprint-owned cards only — the
+        # fixture's work happens inside a sprint covering the frozen today.
+        sprint = client.post("/api/sprints", json={"start_date": DAY, "end_date": "2026-09-13"})
+        assert sprint.status_code == HTTPStatus.CREATED, sprint.text
+        sprint_id = sprint.json()["id"]
+        client.patch(f"/api/sprints/{sprint_id}", json={"status": "active"})
+        client.post(
+            "/api/tasks", json={"id": "t-1", "title": "First block", "sprint_id": sprint_id}
+        )
+        client.post(
+            "/api/tasks", json={"id": "t-2", "title": "Second block", "sprint_id": sprint_id}
+        )
         day = DEFAULT_MOMENT.date().isoformat()
         client.put(
             f"/api/day-plans/{day}",
@@ -132,11 +144,22 @@ def test_stats_estimate_vs_fact_uses_finished_blocks_over_estimate(http_app):
 
 
 @pytest.mark.api
+def _active_sprint(client: TestClient) -> str:
+    """The fixture's sprint (the first one the list returns)."""
+    return str(client.get("/api/sprints").json()[0]["id"])
+
+
 def test_stats_quadrants_bucket_done_tasks(http_app):
     client, _clock = http_app
     client.post(
         "/api/tasks",
-        json={"id": "t-9", "title": "Urgent and important", "important": True, "urgent": True},
+        json={
+            "id": "t-9",
+            "title": "Urgent and important",
+            "important": True,
+            "urgent": True,
+            "sprint_id": _active_sprint(client),  # A24: aggregate members need an owner
+        },
     )
     client.post("/api/tasks/t-9/status", json={"to": "planned"})
     client.post("/api/tasks/t-9/status", json={"to": "doing"})
@@ -152,7 +175,10 @@ def test_stats_quadrants_bucket_done_tasks(http_app):
 @pytest.mark.api
 def test_stats_zombies_flag_doing_task_without_recent_blocks(http_app):
     client, clock = http_app
-    client.post("/api/tasks", json={"id": "t-9", "title": "Stuck frog"})
+    client.post(
+        "/api/tasks",
+        json={"id": "t-9", "title": "Stuck frog", "sprint_id": _active_sprint(client)},
+    )
     client.post("/api/tasks/t-9/status", json={"to": "planned"})
     client.post("/api/tasks/t-9/status", json={"to": "doing"})
     clock.advance(timedelta(days=10))
@@ -208,5 +234,64 @@ def test_stats_snapshot_matches_dto_contract(http_app):
         "goal_depth",
         "parents",
         "zombies",
+        "missed_days",  # E4c PR 9 (spec 07 §4.5): additive section
     }
     assert keys == set(body)
+
+
+@pytest.mark.api
+def test_aggregates_ignore_shelf_tasks(http_app):
+    """A24 (spec 07 §10.13): a sprint-less card is the sandbox — it never
+    enters the totals, even when worked."""
+    client, _clock = http_app
+    client.post("/api/tasks", json={"id": "t-shelf", "title": "Sandbox card"})
+    client.post(
+        "/api/tasks",
+        json={"id": "t-owned", "title": "Sprint card", "sprint_id": _active_sprint(client)},
+    )
+
+    body = client.get("/api/stats", params=PERIOD).json()
+
+    # t-1, t-2, t-owned count; t-shelf is invisible to every aggregate.
+    assert body["totals"]["tasks_total"] == 3
+
+
+@pytest.mark.api
+def test_missed_days_counts_unworked_past_ticks(http_app):
+    """Spec 07 §4.5: a sprint card's past tick without a completed block
+    is a missed day; today is never a miss (the day may still be worked)."""
+    client, clock = http_app
+    sprint_id = _active_sprint(client)  # 2026-09-03 .. 2026-09-13
+    client.post(
+        "/api/tasks",
+        json={
+            "id": "t-late",
+            "title": "Procrastinated",
+            "sprint_id": sprint_id,
+            "recurrence": {"kind": "on_dates", "days": ["2026-09-05", "2026-09-06"]},
+        },
+    )
+    clock.advance(timedelta(days=5))  # now 2026-09-08: both ticks are past
+
+    body = client.get("/api/stats", params={"from": "2026-09-03", "to": "2026-09-08"}).json()
+
+    assert body["missed_days"] == {"count": 2, "cards": 1}
+
+
+@pytest.mark.api
+def test_missed_days_excludes_the_shelf(http_app):
+    """A24/§4.5: a shelf card with past ticks never enters the metric."""
+    client, clock = http_app
+    client.post(
+        "/api/tasks",
+        json={
+            "id": "t-shelf-tick",
+            "title": "Sandbox with marks",
+            "recurrence": {"kind": "on_dates", "days": ["2026-09-05"]},
+        },
+    )  # shelf card: its ticks are nobody's metric
+    clock.advance(timedelta(days=5))
+
+    body = client.get("/api/stats", params={"from": "2026-09-03", "to": "2026-09-08"}).json()
+
+    assert body["missed_days"] == {"count": 0, "cards": 0}

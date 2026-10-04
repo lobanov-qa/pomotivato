@@ -82,6 +82,12 @@ export interface ZombiesDto {
   items: ZombieItemDto[];
 }
 
+/** Spec 07 §4.5: missed sprint-card day ticks inside the period. */
+export interface MissedDaysDto {
+  count: number;
+  cards: number;
+}
+
 export interface StatsDto {
   period: StatsPeriodDto;
   totals: StatsTotalsDto;
@@ -92,6 +98,7 @@ export interface StatsDto {
   goal_depth: GoalDepthRowDto[];
   parents: ParentProgressDto[];
   zombies: ZombiesDto;
+  missed_days: MissedDaysDto;
 }
 
 /** kind is the discriminator (spec 04 §4.2); inactive sections answer null. */

@@ -58,6 +58,7 @@ function statsFixture(overrides: Partial<StatsDto> = {}): StatsDto {
     ],
     parents: [{ task_id: "p-1", title: "Big goal", done_children: 1, total_children: 3 }],
     zombies: { count: 1, items: [{ task_id: "t-7", title: "Stuck frog", days_stuck: 10 }] },
+    missed_days: { count: 2, cards: 1 },
     ...overrides,
   };
 }
@@ -211,5 +212,13 @@ describe("StatsScreen", () => {
     await waitFor(() => expect(screen.getByTestId("stats.stat-score")).toBeInTheDocument());
 
     expect(screen.getByTestId("stats.stat-score")).toHaveTextContent("—");
+  });
+
+  it("shows the missed-days tile with the server number (spec 07 §4.5)", async () => {
+    mockFetch(statsFixture()); // missed_days: { count: 2, cards: 1 }
+    renderScreen();
+
+    expect(await screen.findByTestId("stats.stat-missed")).toHaveTextContent("Пропущенные дни");
+    expect(screen.getByTestId("stats.stat-missed")).toHaveTextContent("2");
   });
 });

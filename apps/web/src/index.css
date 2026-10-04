@@ -43,6 +43,12 @@
   --color-sprint-5: #06b6d4; /* cyan-500 */
   --color-sprint-6: #84cc16; /* lime-500 */
 
+  /* day ticks (spec 07 §4.5): a PLANNED mark must never share the WORK
+     phase color — that was the author's "запланированные дни красные" */
+  --color-day-planned: #16a34a; /* green-600: the mark is a plan */
+  --color-day-missed: #dc2626; /* red-600: a past mark without a worked block */
+  --color-day-worked: var(--color-primary); /* accent: the day was worked */
+
   /* kanban columns (kept muted so phase colors stay unique) */
   --color-col-backlog: #a1a1aa;
   --color-col-planned: #3b82f6;

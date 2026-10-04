@@ -8,7 +8,7 @@ future days is checked against real core logic, not mocked.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import timedelta
+from datetime import date, timedelta
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any
@@ -30,19 +30,36 @@ FAST = {
 }
 DAY = DEFAULT_MOMENT.date().isoformat()  # 2026-09-03, Thursday
 MONDAY = (DEFAULT_MOMENT - timedelta(days=3)).date().isoformat()  # week start
+MONDAY_ISO = date.fromisoformat(MONDAY)
 
 
 @pytest.fixture
 def http_app(tmp_path: Path) -> Iterator[tuple[TestClient, FakeClock]]:
-    """Client over temp DB with one slotted day and a daily habit task."""
+    """Client over temp DB with one slotted day and a daily habit task.
+
+    E4c PR 9 (A24): the sprint screen shows sprint-bound rows only, so the
+    fixture's cards live in a sprint covering the window.
+    """
     app = create_app(tmp_path / "week-test.db")
     clock = FakeClock(DEFAULT_MOMENT)
     app.state.clock = clock
     with TestClient(app) as client:
-        client.post("/api/tasks", json={"id": "t-1", "title": "Work task"})
+        # Sprints may not start in the past (V19), so the window opens
+        # today; Once/Daily cards are period-agnostic (V19 checks OnDates
+        # only) and the screen filter cares about the OWNER, not dates.
+        sprint = client.post("/api/sprints", json={"start_date": DAY, "end_date": "2026-09-13"})
+        assert sprint.status_code == HTTPStatus.CREATED, sprint.text
+        sprint_id = sprint.json()["id"]
+        client.patch(f"/api/sprints/{sprint_id}", json={"status": "active"})
+        client.post("/api/tasks", json={"id": "t-1", "title": "Work task", "sprint_id": sprint_id})
         client.post(
             "/api/tasks",
-            json={"id": "h-1", "title": "Daily habit", "recurrence": {"kind": "daily"}},
+            json={
+                "id": "h-1",
+                "title": "Daily habit",
+                "recurrence": {"kind": "daily"},
+                "sprint_id": sprint_id,
+            },
         )
         client.put(
             f"/api/day-plans/{DAY}",
@@ -164,3 +181,21 @@ def test_week_validates_days_range_and_bad_start(http_app):
     assert zero_days.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert huge_days.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert bad_start.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.api
+def test_week_screen_hides_shelf_tasks_when_sprint_exists(http_app):
+    """A24 (spec 07 §4.1.2): a daily card WITHOUT a sprint never appears on
+    the sprint screen — planned rows and slot rows are sprint-bound."""
+    client, _clock = http_app
+    client.post(
+        "/api/tasks",
+        json={"id": "s-1", "title": "Shelf habit", "recurrence": {"kind": "daily"}},
+    )
+    friday = (MONDAY_ISO + timedelta(days=4)).isoformat()
+
+    items = client.get("/api/week", params={"start": MONDAY_ISO, "days": 7}).json()["items"]
+    planned = [row["task_id"] for row in _day(items, friday)["planned"]]
+
+    assert "h-1" in planned  # the sprint-owned daily habit still shows
+    assert "s-1" not in planned

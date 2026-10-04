@@ -125,6 +125,13 @@ export function StatsScreen() {
     { id: "reviews", label: "dial.reviews-count", value: String(data.totals.reviews_count) },
     { id: "tasks", label: "summary.tasks", value: String(data.totals.tasks_done) },
     { id: "total", label: "stats.tasks-total", value: String(data.totals.tasks_total) },
+    // Spec 07 §4.5: unworked past ticks of sprint cards in the period —
+    // server-computed, the shelf is out of the count (A24).
+    {
+      id: "missed",
+      label: "stats.missed-days",
+      value: String(data.missed_days.count),
+    },
   ];
 
   return (
