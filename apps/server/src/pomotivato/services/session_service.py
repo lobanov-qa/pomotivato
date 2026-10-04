@@ -24,10 +24,11 @@ from pomotivato.core.models import (
     Session,
     SessionSettings,
     SessionState,
+    Task,
     TaskStatus,
 )
 from pomotivato.infra.errors import ConflictError, NotFoundError
-from pomotivato.infra.repository import TaskRepository
+from pomotivato.infra.repository import SprintRepository, TaskRepository
 from pomotivato.infra.repository_sessions import (
     ReviewRepository,
     SegmentRepository,
@@ -78,6 +79,15 @@ class FsmRegistry:
         return None
 
 
+def _in_start_scope(task: Task, sprint_id: str | None, no_sprint: bool) -> bool:
+    """V17 slot filter: scope given -> same owner; no scope -> any card."""
+    if no_sprint:
+        return task.sprint_id is None
+    if sprint_id is not None:
+        return task.sprint_id == sprint_id
+    return True
+
+
 class SessionService:
     """Create sessions, execute FSM commands, mirror to the database."""
 
@@ -94,26 +104,54 @@ class SessionService:
         self._segments = SegmentRepository(session)
         self._reviews = ReviewRepository(session)
 
-    async def start(self, plan: DayPlan, settings: SessionSettings) -> SessionView:
-        await self._require_task_in_progress(plan)
+    async def start(
+        self,
+        plan: DayPlan,
+        settings: SessionSettings,
+        *,
+        sprint_id: str | None = None,
+        no_sprint: bool = False,
+    ) -> SessionView:
+        await self._require_task_in_progress(plan, sprint_id=sprint_id, no_sprint=no_sprint)
         fsm = SessionFSM(clock=self._clock, day_plan=plan, settings=settings)
         fsm.start()
         self._registry.put(fsm)
         await self._persist(fsm)
         return self._view(fsm)
 
-    async def _require_task_in_progress(self, plan: DayPlan) -> None:
+    async def _require_task_in_progress(
+        self,
+        plan: DayPlan,
+        *,
+        sprint_id: str | None = None,
+        no_sprint: bool = False,
+    ) -> None:
         """Refuse a plan no «В работе» card can back (author's law 23.09).
 
         The day plan is a projection of the doing column, and the server keeps
         the row after a score walks the card out of «В работе» (planned while
         repeat days remain, done when the ticks run out). Starting such a plan
         would run an already-worked card again, so the refusal happens here
-        instead of being silently accepted. Server text is EN (source of
-        truth); the client renders the reason in the user's language.
+        instead of being silently accepted. E4c (V17 red. 5.6, spec 07 §5.6)
+        scopes the law: a sprint scope only counts its own cards and must
+        cover today; the shelf counts sprint-less cards. The server check is
+        mandatory — client filtering never replaces it (DF19 precedent).
+        Server text is EN (source of truth); the client renders the reason.
         """
+        if sprint_id is not None:
+            # V17 red. 5.6: a sprint scope must cover today (A23's twin on
+            # the start path); the sprint-not-today refusal names the fix.
+            sprint = await SprintRepository(self._session).get(sprint_id)
+            if sprint is None:
+                msg = f"sprint {sprint_id!r} not found"
+                raise NotFoundError(msg)
+            if not sprint.covers(self._clock.now().date()):
+                msg = f"sprint {sprint_id!r} does not cover today; switch to the sprint of today"
+                raise ConflictError(msg)
         in_progress = {
-            task.id for task in await TaskRepository(self._session).list(status=TaskStatus.DOING)
+            task.id
+            for task in await TaskRepository(self._session).list(status=TaskStatus.DOING)
+            if _in_start_scope(task, sprint_id, no_sprint)
         }
         if not any(slot.task_id in in_progress for slot in plan.slots):
             msg = f"day plan {plan.id!r} has no task in progress"

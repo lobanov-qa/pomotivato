@@ -10,7 +10,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pause, Play, SkipForward, Square } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Pause, Play, SkipForward, Square } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError, type SessionDto } from "@/api/client";
 import { Dial } from "@/components/dial/Dial";
@@ -19,12 +19,26 @@ import { SummaryPanel } from "@/components/dial/SummaryPanel";
 import { Button } from "@/components/ui/button";
 import { HintCard } from "@/components/dial/HintCard";
 import { useHints } from "@/features/science/hooks";
+import { parseOverCount, refreshCandidates, startScope, swapSector } from "@/features/kanban/focusPlan";
 import { invalidateBoard, useTasks } from "@/features/kanban/hooks";
-import { deriveSlots } from "@/features/kanban/planner";
+import { deriveSlots, planIdForDate } from "@/features/kanban/planner";
 import { useSessionEvents } from "@/features/dial/useSessionEvents";
+import { useSprints } from "@/features/sprints/hooks";
+import {
+  defaultScope,
+  readScopeParam,
+  scopeOptions,
+  scopeToParam,
+  withinScope,
+  writeScopeParam,
+  type ScopeId,
+} from "@/features/kanban/scope";
+import { useUiSettings } from "@/features/settings/hooks";
 import { type PhaseName } from "@/features/dial/geometry";
 import { t } from "@/i18n/ru";
 import { cn } from "@/lib/utils";
+
+type SlotOverride = { sector: number; task_id: string }[];
 
 function today(): string {
   return new Date().toLocaleDateString("en-CA");
@@ -36,6 +50,13 @@ export function FocusScreen() {
   const sessionId: string | null = status.data?.active ? (status.data.session_id ?? null) : null;
   const { session, connected, anchorMs, refetch } = useSessionEvents(sessionId);
   const { tasks } = useTasks();
+  const { sprints } = useSprints();
+  const { data: settings } = useUiSettings();
+  const maxInWork = settings?.ui.max_in_work ?? 6;
+  // The scope is the one the board chose (§4.4: shared with «Задачи»):
+  // ?sprint=<id|none>, default = today's sprint else the shelf.
+  const [scopeOverride, setScopeOverride] = useState<ScopeId | undefined>(readScopeParam);
+  const scope: ScopeId = defaultScope(sprints, today(), scopeOverride);
 
   // Local 1s tick between server events; the value is always derived from
   // the anchored remaining_sec, so a paused server freezes it honestly.
@@ -105,10 +126,30 @@ export function FocusScreen() {
     [session, titleOf],
   );
 
+  const scopeTasks = useMemo(() => tasks.filter((task) => withinScope(task, scope)), [tasks, scope]);
   const plannedToday = useMemo(
-    () => deriveSlots(tasks.filter((task) => task.status === "doing")),
-    [tasks],
+    // §4.4: the pre-start plan is the SELECTED scope's doing cards — one
+    // scope works in a day (A26), a mixed plan is not even startable.
+    () => deriveSlots(scopeTasks.filter((task) => task.status === "doing")),
+    [scopeTasks],
   );
+  // Arrows before the start reorder ONE sector (A, B, A is legal, §4.4);
+  // null = follow the derived column order, an override is local until
+  // it lands in the PUT on start (the server freezes the plan per start).
+  // The override is stored WITH the scope it was made in, so switching the
+  // scope drops it during render instead of through an effect cascade.
+  const [override, setOverride] = useState<{ scope: ScopeId; slots: SlotOverride } | null>(null);
+  const prePlan = useMemo(
+    () => (override && override.scope === scope ? override.slots : plannedToday),
+    [override, scope, plannedToday],
+  );
+  const movers = useMemo(() => refreshCandidates(scopeTasks, scope, today()), [scopeTasks, scope]);
+  const startScopeKind = startScope(sprints, scope, today());
+  const wrongSprint = startScopeKind.kind === "wrong-sprint";
+  const activeToday = sprints.find(
+    (sp) => sp.status === "active" && today() >= sp.start_date && today() <= sp.end_date,
+  ) ?? null;
+  const doingCount = scopeTasks.filter((task) => task.status === "doing" && !task.no_timer).length;
 
   // Review flow (spec 03 §2 + E4c V24): a closed work segment without a
   // verdict opens the modal; the FSM never waits for it (timer runs behind
@@ -129,6 +170,8 @@ export function FocusScreen() {
   // Author's law 23.09: the server refuses a plan no «В работе» card backs;
   // the dial must say so in the user's language instead of failing silently.
   const [startBlocked, setStartBlocked] = useState(false);
+  const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
+  const [startNotice, setStartNotice] = useState<string | null>(null);
 
   async function submitReview(payload: {
     score: number | null;
@@ -146,16 +189,47 @@ export function FocusScreen() {
     await refetch().catch(() => undefined);
   }
 
+  async function refreshStatus(): Promise<void> {
+    setRefreshNotice(null);
+    try {
+      const scopeBody = scope === null ? { no_sprint: true } : { sprint_id: scope ?? undefined };
+      const result = await api.refreshStatus(today(), scopeBody);
+      invalidateBoard(client);
+      setRefreshNotice(t("dial.refresh-done", "ru", { moved: result.moved }));
+    } catch (error) {
+      // V25: the server names the numbers; re-render them as the RU A4
+      // sentence (§4.4: "подними лимит в настройках или переставь").
+      if (error instanceof ApiError && error.status === 409) {
+        const numbers = parseOverCount(error.message);
+        setRefreshNotice(
+          numbers
+            ? t("dial.refresh-over", "ru", {
+                in: numbers.in,
+                limit: numbers.limit,
+                more: numbers.more,
+              })
+            : error.message,
+        );
+        return;
+      }
+      setRefreshNotice(t("error.unknown"));
+    }
+  }
+
   async function act(verb: "start" | "pause" | "resume" | "stop" | "skip"): Promise<void> {
     try {
       if (verb === "start") {
-        if (plannedToday.length === 0) return;
+        if (prePlan.length === 0) return;
         const date = today();
-        const plan = await api.getDayPlan(date).catch(() => null);
-        const planId =
-          plan?.id ?? (await api.putDayPlan({ id: `plan-${date}`, date, slots: plannedToday })).id;
-        await api.startSession({ day_plan_id: planId });
+        // V17 red. 5.6: the start is scoped — the server answers 409 when
+        // the selected sprint doesn't cover today; the UI warns first.
+        const scopeBody = scope === null ? { no_sprint: true } : { sprint_id: scope };
+        const planId = await api
+          .putDayPlan({ id: planIdForDate(date), date, slots: prePlan })
+          .then((stored) => stored.id);
+        await api.startSession({ day_plan_id: planId, ...scopeBody });
         setStartBlocked(false);
+        setStartNotice(null);
       } else if (verb === "pause" && session) {
         await api.pauseSession(session.id);
       } else if (verb === "resume" && session) {
@@ -168,6 +242,11 @@ export function FocusScreen() {
     } catch (error) {
       if (verb === "start" && error instanceof ApiError && error.status === 409) {
         setStartBlocked(true);
+        setStartNotice(
+          error.message.includes("does not cover today")
+            ? t("dial.start-wrong-sprint")
+            : t("dial.start-blocked"),
+        );
         return;
       }
       throw error;
@@ -202,8 +281,49 @@ export function FocusScreen() {
           {t("dial.disconnected")}
         </p>
       )}
+      {/* §4.4: the same scope the board chose — ?sprint= is shared (A26) */}
+      {!running && (
+        <label className="flex items-center gap-2 text-sm">
+          {t("kanban.scope-title")}
+          <select
+            data-testid="dial.scope-select"
+            aria-label={t("kanban.scope-title")}
+            className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+            value={scopeToParam(scope)}
+            onChange={(event) => {
+              const value = event.target.value === "none" ? null : event.target.value;
+              setScopeOverride(value);
+              writeScopeParam(value);
+            }}
+          >
+            {scopeOptions(sprints).map((option) => (
+              <option key={String(option.value)} value={scopeToParam(option.value)}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {wrongSprint && !running && (
+        <p className="text-sm text-warning" data-testid="dial.scope-warning">
+          {t("dial.scope-wrong-sprint")}
+          {activeToday && (
+            <button
+              type="button"
+              data-testid="dial.goto-today"
+              className="ml-2 rounded-md border border-primary px-2 py-0.5 text-xs text-primary hover:bg-primary/10"
+              onClick={() => {
+                setScopeOverride(activeToday.id);
+                writeScopeParam(activeToday.id);
+              }}
+            >
+              {t("dial.goto-today")}
+            </button>
+          )}
+        </p>
+      )}
       <Dial
-        sectors={running ? sectors : plannedToday.length}
+        sectors={running ? sectors : prePlan.length}
         phase={(session?.phase ?? null) as PhaseName | null}
         sectorIndex={sectorIndex}
         sectorFraction={Math.min(1, Math.max(0, sectorFraction))}
@@ -240,7 +360,7 @@ export function FocusScreen() {
         {!running && (
           <Button
             data-testid="dial.start-button"
-            disabled={plannedToday.length === 0}
+            disabled={prePlan.length === 0}
             onClick={() => void act("start")}
           >
             <Play className="h-4 w-4" />
@@ -272,14 +392,74 @@ export function FocusScreen() {
           </Button>
         )}
       </div>
-      {plannedToday.length === 0 && !running && (
+      {!running && prePlan.length > 0 && (
+        <ol className="flex w-full max-w-md flex-col gap-1" data-testid="dial.pre-plan">
+          <li className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("dial.pre-plan")}
+          </li>
+          {prePlan.map((slot, i) => (
+            <li
+              key={`${slot.task_id}-${slot.sector}`}
+              data-testid={`dial.pre-item-${slot.sector}`}
+              className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm"
+            >
+              <span className="font-mono text-xs">{slot.sector}</span>
+              <span className="truncate">{titleOf(slot.task_id)}</span>
+              <span className="ml-auto flex gap-1">
+                <button
+                  type="button"
+                  aria-label={t("dial.move-up")}
+                  data-testid={`dial.pre-up-${slot.sector}`}
+                  disabled={i === 0}
+                  onClick={() => setOverride({ scope, slots: swapSector(prePlan, i, -1) })}
+                  className="rounded border p-1 hover:bg-muted disabled:opacity-30"
+                >
+                  <ArrowUp className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  type="button"
+                  aria-label={t("dial.move-down")}
+                  data-testid={`dial.pre-down-${slot.sector}`}
+                  disabled={i === prePlan.length - 1}
+                  onClick={() => setOverride({ scope, slots: swapSector(prePlan, i, 1) })}
+                  className="rounded border p-1 hover:bg-muted disabled:opacity-30"
+                >
+                  <ArrowDown className="h-3.5 w-3.5" />
+                </button>
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+      {!running && movers.length > 0 && (
+        <div className="flex flex-col items-center gap-1">
+          <Button
+            variant="outline"
+            data-testid="dial.refresh-button"
+            onClick={() => void refreshStatus()}
+          >
+            {t("dial.refresh-status", "ru", { count: movers.length })}
+          </Button>
+          {doingCount + movers.filter((task) => !task.no_timer).length > maxInWork && (
+            <p className="text-xs text-warning" data-testid="dial.refresh-warn">
+              {t("dial.refresh-over-limit", "ru", { in: doingCount, limit: maxInWork, more: movers.length })}
+            </p>
+          )}
+        </div>
+      )}
+      {refreshNotice && (
+        <p className="text-sm text-muted-foreground" data-testid="dial.refresh-notice">
+          {refreshNotice}
+        </p>
+      )}
+      {prePlan.length === 0 && !running && (
         <p className="text-sm text-muted-foreground" data-testid="dial.no-plan">
           {t("dial.no-plan")}
         </p>
       )}
-      {startBlocked && plannedToday.length > 0 && !running && (
+      {startBlocked && prePlan.length > 0 && !running && (
         <p className="text-sm text-warning" data-testid="dial.start-blocked">
-          {t("dial.start-blocked")}
+          {startNotice ?? t("dial.start-blocked")}
         </p>
       )}
       {/* numbered sector legend: which tasks the dial holds, in order */}
@@ -296,6 +476,9 @@ export function FocusScreen() {
               }
             >
               <span className="font-mono text-xs">{i + 1}</span>
+              {i < workDone && !isBreak && (
+                <Check className="h-4 w-4 shrink-0 text-col-done" data-testid={`dial.legend-done-${i + 1}`} />
+              )}
               <span className="truncate">{title}</span>
               {i === sectorIndex && cueLine(session?.slots?.[i]?.task_id) && (
                 <span

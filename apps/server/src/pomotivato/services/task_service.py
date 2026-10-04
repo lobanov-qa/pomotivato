@@ -251,6 +251,48 @@ class TaskService:
             await self._tasks.put(replace(stale, status=TaskStatus.ARCHIVED))
         await self._session.flush()
 
+    async def refresh_scope(self, day: date, *, sprint_id: str | None, no_sprint: bool) -> int:
+        """«Обновить статус» (V25/A4, spec 07 §5.2): carry today's cards to work.
+
+        Selection (§5.2 formula): scope ∩ (backlog|planned) ∩ ticked today ∩
+        timer-carrying. The move is all-or-nothing: when the funnel would
+        overflow, the refusal names the numbers and NOTHING moved (V25 —
+        the author's A4: a partial activation is worse than none). The
+        per-card door is set_status, so every mover also gets its A28
+        auto-mark and the sprint-window guards for free.
+        """
+        candidates = [
+            task
+            for task in await self._tasks.list(sprint_id=sprint_id, no_sprint=no_sprint)
+            if task.status in (TaskStatus.BACKLOG, TaskStatus.PLANNED)
+            and not task.no_timer
+            and day in tick_days(task)
+        ]
+        if not candidates:
+            return 0
+        limit = (await self._settings.get_ui_settings()).max_in_work
+        doing = await self._tasks.list(status=TaskStatus.DOING)
+        timer_load = sum(1 for task in doing if not task.no_timer)
+        if timer_load + len(candidates) > limit:
+            extra = timer_load + len(candidates) - limit
+            msg = (
+                f"refresh would exceed the in-work limit: {timer_load} of {limit} in work, "
+                f"{len(candidates)} more to move ({extra} over)"
+            )
+            raise ConflictError(msg)
+        # V25 says "refused as a whole" for the limit; the same all-or-nothing
+        # law protects the other gates: validate the FULL planned->doing path
+        # (the V8 science gate may block a move) before the first write.
+        require = await self._settings.require_science_fields()
+        for task in candidates:
+            if task.status is TaskStatus.BACKLOG:
+                validate_planning_ready(task, require)
+        for task in candidates:
+            if task.status is TaskStatus.BACKLOG:
+                await self.set_status(task.id, TaskStatus.PLANNED)
+            await self.set_status(task.id, TaskStatus.DOING)
+        return len(candidates)
+
     async def _require_done_clean(self, task: Task) -> None:
         """V31 (spec 07): a sprint card with a hole never reaches «Готово».
 

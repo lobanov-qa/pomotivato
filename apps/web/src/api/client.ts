@@ -286,8 +286,16 @@ export const api = {
   carryChoiceAll: (sprintId: string) =>
     request<{ decided: number }>("POST", `/api/sprints/${sprintId}/carry-choice-all`),
 
-  startSession: (body: { day_plan_id: string; settings?: Partial<SessionSettingsDto> }) =>
-    request<SessionDto>("POST", "/api/sessions", body),
+  startSession: (body: {
+    day_plan_id: string;
+    settings?: Partial<SessionSettingsDto>;
+    /** V17 red. 5.6: the scope the start happens in (omit = any card). */
+    sprint_id?: string | null;
+    no_sprint?: boolean;
+  }) => request<SessionDto>("POST", "/api/sessions", body),
+  /** «Обновить статус» (A4/V25): today's ticked scope cards -> «В работе». */
+  refreshStatus: (date: string, scope: { sprint_id?: string; no_sprint?: boolean }) =>
+    request<{ moved: number }>("POST", `/api/day-plans/${date}/refresh-status`, scope),
   getSession: (id: string) => request<SessionDto>("GET", `/api/sessions/${id}`),
   pauseSession: (id: string) => request<SessionDto>("POST", `/api/sessions/${id}/pause`),
   resumeSession: (id: string) => request<SessionDto>("POST", `/api/sessions/${id}/resume`),
