@@ -45,7 +45,7 @@ def _closed_segment(
 
 
 def test_export_document_sections_and_period() -> None:
-    task = task_factory(id="t-1")
+    task = task_factory(sprint_id="s-fix", id="t-1")
     plan = day_plan_factory(date=START, slots=(slot_factory(task_id="t-1"),))
     session = session_factory(
         id="s-1",

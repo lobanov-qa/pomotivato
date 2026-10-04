@@ -65,8 +65,8 @@ def test_today_counts_as_past_even_when_empty() -> None:
 def test_past_day_reports_blocks_focus_and_slots_with_last_score() -> None:
     plan = {MONDAY: (Slot(sector=1, task_id="t-1"), Slot(sector=2, task_id="t-2"))}
     tasks = (
-        task_factory(id="t-1", title="Habit loop", status=TaskStatus.DOING),
-        task_factory(id="t-2", title="Other", status=TaskStatus.PLANNED),
+        task_factory(sprint_id="s-fix", id="t-1", title="Habit loop", status=TaskStatus.DOING),
+        task_factory(sprint_id="s-fix", id="t-2", title="Other", status=TaskStatus.PLANNED),
     )
     blocks = (
         WorkBlock("s-1", "t-1", MONDAY, 25),
@@ -111,13 +111,23 @@ def test_slot_of_deleted_task_keeps_placeholder_title() -> None:
 
 
 def test_future_day_materializes_active_recurrence_only() -> None:
-    daily = task_factory(id="r-1", title="Daily jog", recurrence=daily_recurrence())
-    once = task_factory(id="r-2", title="One off", recurrence=Once())
+    daily = task_factory(
+        sprint_id="s-fix", id="r-1", title="Daily jog", recurrence=daily_recurrence()
+    )
+    once = task_factory(sprint_id="s-fix", id="r-2", title="One off", recurrence=Once())
     done_habit = task_factory(
-        id="r-3", title="Old habit", recurrence=daily_recurrence(), status=TaskStatus.DONE
+        sprint_id="s-fix",
+        id="r-3",
+        title="Old habit",
+        recurrence=daily_recurrence(),
+        status=TaskStatus.DONE,
     )
     archived = task_factory(
-        id="r-4", title="Gone habit", recurrence=daily_recurrence(), status=TaskStatus.ARCHIVED
+        sprint_id="s-fix",
+        id="r-4",
+        title="Gone habit",
+        recurrence=daily_recurrence(),
+        status=TaskStatus.ARCHIVED,
     )
     tasks = (daily, once, done_habit, archived)
 
@@ -149,9 +159,11 @@ def test_window_after_today_shows_only_future() -> None:
 def test_future_day_renders_own_slots_with_titles() -> None:
     # E4b planning surface: a task dragged onto tomorrow must appear in its
     # slots (with title), not vanish behind the planned-only contract.
-    jog = task_factory(id="r-1", title="Daily jog", recurrence=daily_recurrence())
+    jog = task_factory(
+        sprint_id="s-fix", id="r-1", title="Daily jog", recurrence=daily_recurrence()
+    )
     plan = {TUESDAY: (Slot(sector=1, task_id="x-1"),)}
-    other = task_factory(id="x-1", title="Gig")
+    other = task_factory(sprint_id="s-fix", id="x-1", title="Gig")
 
     item = _projection(days=2, plans=plan, tasks=(other, jog))["items"][1]
 
@@ -169,7 +181,9 @@ def test_future_day_renders_own_slots_with_titles() -> None:
 def test_activated_task_never_ghosts_in_planned() -> None:
     # After activate, the daily task IS a slot: the recurrence preview must
     # not show a second copy of it above the sector list (spec 05 §3.2).
-    jog = task_factory(id="r-1", title="Daily jog", recurrence=daily_recurrence())
+    jog = task_factory(
+        sprint_id="s-fix", id="r-1", title="Daily jog", recurrence=daily_recurrence()
+    )
     plan = {TUESDAY: (Slot(sector=1, task_id="r-1"),)}
 
     item = _projection(days=2, plans=plan, tasks=(jog,))["items"][1]

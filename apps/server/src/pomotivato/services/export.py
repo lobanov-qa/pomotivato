@@ -51,7 +51,13 @@ def export_document(
     segments: tuple[Segment, ...],
     reviews: tuple[Review, ...],
 ) -> dict[str, Any]:
-    """Assemble the JSON document (events cut by period, tasks in full)."""
+    """Assemble the JSON document (events cut by period, tasks in full).
+
+    A24 (spec 07 §10.13): the task catalog lists sprint-owned cards only —
+    the sandbox is not part of the statistics record; the event rows stay
+    complete (sessions and segments are theirs, not the card's).
+    """
+    tasks = tuple(task for task in tasks if task.sprint_id is not None)
 
     def in_period(moment: datetime | None) -> bool:
         return moment is not None and start <= moment.date() <= end

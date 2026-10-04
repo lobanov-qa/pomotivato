@@ -36,7 +36,13 @@ def http_app(tmp_path: Path) -> Iterator[tuple[TestClient, FakeClock]]:
     clock = FakeClock(DEFAULT_MOMENT)
     app.state.clock = clock
     with TestClient(app) as client:
-        client.post("/api/tasks", json={"id": "t-1", "title": "Block A"})
+        # E4c PR 9 (A24): the export catalog is sprint-bound; give the
+        # fixture card a home so the event story below stays testable.
+        sprint = client.post("/api/sprints", json={"start_date": DAY, "end_date": "2026-09-13"})
+        assert sprint.status_code == HTTPStatus.CREATED, sprint.text
+        sprint_id = sprint.json()["id"]
+        client.patch(f"/api/sprints/{sprint_id}", json={"status": "active"})
+        client.post("/api/tasks", json={"id": "t-1", "title": "Block A", "sprint_id": sprint_id})
         put_in_work(client, "t-1")
         client.put(
             f"/api/day-plans/{DAY}",

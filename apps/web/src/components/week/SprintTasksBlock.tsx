@@ -9,7 +9,7 @@
 
 import { Link } from "react-router-dom";
 import type { SprintDto, TaskDto } from "@/api/client";
-import { tickStates } from "@/features/kanban/tickStates";
+import { TICK_CLASS, tickStates } from "@/features/kanban/tickStates";
 import { useCarryChoice, useCarryChoiceAll } from "@/features/sprints/hooks";
 import { type MessageKey, t } from "@/i18n/ru";
 import { cn } from "@/lib/utils";
@@ -107,12 +107,7 @@ export function DayCircles({ task, today }: { task: TaskDto; today: string }) {
         <span
           key={iso}
           title={iso}
-          className={cn(
-            "h-2.5 w-2.5 rounded-full border",
-            state === "worked" && "border-transparent bg-col-done",
-            state === "missed" && "border-danger",
-            state === "planned" && "border-primary/50",
-          )}
+          className={cn("h-2.5 w-2.5 rounded-full border", TICK_CLASS[state])}
         />
       ))}
     </span>

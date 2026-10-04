@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { t } from "@/i18n/ru";
 import { cn } from "@/lib/utils";
 import { cardHint, dayTickable, formatCardHint } from "@/features/kanban/dayHints";
+import { TICK_CLASS, tickStateOf } from "@/features/kanban/tickStates";
 import { isTicked, toggleDay } from "@/features/kanban/recurrence";
 import {
   QUADRANT_KEY,
@@ -219,6 +220,10 @@ export function TaskPanel({
           <div className="flex flex-wrap gap-1" data-testid={`task-panel.days-${task.id}`}>
             {sprintDays.map(({ iso, label }) => {
               const ticked = isTicked(task.recurrence, iso);
+              // §4.5 colors come from the server's days_missed (the V31
+              // blockers): past + unworked = missed (red), past + worked or
+              // not-missed = worked (accent), future tick = planned (green).
+              const missedDays = task.days_missed ?? [];
               // V21 UI half: past days keep existing marks but never gain
               // new ones — the server answers the same rule with 422.
               const dead = !dayTickable(iso, today, ticked);
@@ -233,9 +238,7 @@ export function TaskPanel({
                   onClick={() => toggleTick(iso)}
                   className={cn(
                     "rounded-md border px-2 py-1 text-xs transition-colors",
-                    ticked
-                      ? "border-primary bg-primary/10 font-medium text-primary"
-                      : "hover:bg-muted",
+                    ticked ? TICK_CLASS[tickStateOf(iso, today, missedDays)] : "hover:bg-muted",
                     (task.no_timer || dead) && "pointer-events-none opacity-40",
                   )}
                 >

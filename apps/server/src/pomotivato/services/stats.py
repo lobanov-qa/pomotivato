@@ -12,7 +12,51 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from pomotivato.core.models import Review, Task, TaskStatus
+from pomotivato.core.schedule import expand_recurrence
 from pomotivato.services.blocks import WorkBlock
+
+
+def in_stats_scope(tasks: tuple[Task, ...]) -> tuple[Task, ...]:
+    """A24 (spec 07 §2/§10.13): the sandbox is not statistics.
+
+    Cards without a sprint owner never enter aggregates or the day-marks
+    metric; sessions/segments stay complete elsewhere (the funnel law owns
+    those rows). One filter, every caller.
+    """
+    return tuple(task for task in tasks if task.sprint_id is not None)
+
+
+def missed_days_stats(
+    tasks: tuple[Task, ...],
+    blocks: tuple[WorkBlock, ...],
+    *,
+    start: date,
+    end: date,
+    today: date,
+) -> dict[str, Any]:
+    """Spec 07 §4.5: the missed-day metric for the dashboard.
+
+    A missed day is a tick of a sprint card in the past (<= yesterday, so
+    today is never a miss) without a completed work block on that day.
+    Ticks expand through core.schedule — the one owner of "which days"
+    (the board, the walk and here agree by construction). S7: a card added
+    on day five has no marks for days 1-4 and they are not misses.
+    """
+    worked: dict[str, set[date]] = {}
+    for block in blocks:
+        if block.task_id is not None:
+            worked.setdefault(block.task_id, set()).add(block.day)
+    count = 0
+    cards = 0
+    for task in in_stats_scope(tasks):
+        horizon = min(end, today - timedelta(days=1))
+        days = expand_recurrence(task.recurrence, start, horizon) if start <= horizon else ()
+        missed = [day for day in days if day not in worked.get(task.id, set())]
+        if missed:
+            cards += 1
+            count += len(missed)
+    return {"count": count, "cards": cards}
+
 
 # Quadrant keys are transport contract (spec 04 §4.1): stable across locales.
 _QUADRANTS: tuple[tuple[str, bool, bool], ...] = (
@@ -99,7 +143,7 @@ def estimate_vs_fact(tasks: tuple[Task, ...], blocks: tuple[WorkBlock, ...]) -> 
     points = []
     estimate_total = 0
     actual_total = 0
-    for task in tasks:
+    for task in in_stats_scope(tasks):  # A24: the sandbox never enters the math
         actual = actual_by_task.get(task.id, 0)
         if task.status is not TaskStatus.DONE or actual == 0:
             continue
@@ -132,7 +176,7 @@ def quadrant_stats(
     for key, important, urgent in _QUADRANTS:
         done = [
             t
-            for t in tasks
+            for t in in_stats_scope(tasks)  # A24
             if t.status is TaskStatus.DONE and t.important is important and t.urgent is urgent
         ]
         for task in done:
@@ -155,7 +199,7 @@ def quadrant_stats(
 def goal_depth(tasks: tuple[Task, ...]) -> list[dict[str, Any]]:
     """Histogram 0..3 of filled scientific fields vs done ratio per bucket."""
     buckets: list[list[Task]] = [[], [], [], []]
-    for task in tasks:
+    for task in in_stats_scope(tasks):  # A24
         if task.status is TaskStatus.ARCHIVED:
             continue
         filled = sum(1 for field in (task.done_criteria, task.benefit, task.when_then) if field)
@@ -176,11 +220,12 @@ def goal_depth(tasks: tuple[Task, ...]) -> list[dict[str, Any]]:
 
 def parent_progress(tasks: tuple[Task, ...]) -> list[dict[str, Any]]:
     """Per parent with children: done/total (spec 04 §3)."""
+    scoped = in_stats_scope(tasks)  # A24
     by_parent: dict[str, list[Task]] = {}
-    for task in tasks:
+    for task in scoped:
         if task.parent_id is not None:
             by_parent.setdefault(task.parent_id, []).append(task)
-    titles = {task.id: task for task in tasks}
+    titles = {task.id: task for task in scoped}
     rows = []
     for parent_id, children in sorted(by_parent.items()):
         parent = titles.get(parent_id)
@@ -216,7 +261,7 @@ def zombies(
             if current is None or block.day > current:
                 last_seen[block.task_id] = block.day
     items: list[dict[str, Any]] = []
-    for task in tasks:
+    for task in in_stats_scope(tasks):  # A24
         if task.status is not TaskStatus.DOING:
             continue
         anchor = last_seen.get(task.id) or task.created_at.date()
