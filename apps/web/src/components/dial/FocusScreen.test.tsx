@@ -164,6 +164,27 @@ function renderScreen() {
   );
 }
 
+function idleFetch(tasks: TaskDto[]) {
+  return vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    const json = (status: number, body: unknown) =>
+      new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+    if (url.startsWith("/api/status")) {
+      return json(200, {
+        active: false,
+        session_id: null,
+        state: null,
+        phase: null,
+        remaining_sec: null,
+        server_now: "2026-09-06T09:00:00+00:00",
+        date: "2026-09-06",
+      });
+    }
+    if (url.startsWith("/api/tasks")) return json(200, tasks);
+    return json(404, { detail: { code: "not_found", message: url } });
+  });
+}
+
 describe("FocusScreen", () => {
   it("renders the dial with sectors from the session snapshot", async () => {
     renderScreen();
@@ -287,6 +308,80 @@ describe("FocusScreen", () => {
 
     expect(await screen.findByTestId("dial.start-blocked")).toHaveTextContent(
       "нет ни одной задачи «В работе»",
+    );
+  });
+
+  it("pre-start plan lists the scope's sectors with working arrows (§4.4)", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      idleFetch([
+        { ...TASKS[0], estimate_blocks: 1 },
+        { ...TASKS[0], id: "t-2", title: "Second task", status: "doing", estimate_blocks: 1 },
+      ])
+    );
+
+    renderScreen();
+    await screen.findByTestId("dial.pre-item-2"); // shelf scope, two timer cards
+    expect(screen.getByTestId("dial.pre-item-1")).toHaveTextContent("Deep work");
+
+    await user.click(screen.getByTestId("dial.pre-down-1")); // one sector down
+
+    expect(screen.getByTestId("dial.pre-item-1")).toHaveTextContent("Second task");
+    expect(screen.getByTestId("dial.pre-item-2")).toHaveTextContent("Deep work");
+  });
+
+  it("the refresh button shows for ticked scope cards and POSTs the scope", async () => {
+    const user = userEvent.setup();
+    const today = new Date().toLocaleDateString("en-CA");
+    const posted: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const json = (status: number, body: unknown) =>
+          new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+        if (url.startsWith("/api/status")) {
+          return json(200, {
+            active: false,
+            session_id: null,
+            state: null,
+            phase: null,
+            remaining_sec: null,
+            server_now: "2026-09-06T09:00:00+00:00",
+            date: "2026-09-06",
+          });
+        }
+        if (url.startsWith("/api/tasks")) {
+          return json(200, [
+            {
+              ...TASKS[0],
+              id: "t-wait",
+              title: "Ticked shelf card",
+              status: "backlog",
+              sprint_id: null,
+              recurrence: { kind: "on_dates", days: [today] },
+            },
+          ]);
+        }
+        if (url.includes("/refresh-status") && init?.method === "POST") {
+          posted.push(String(init.body));
+          return json(200, { moved: 1 });
+        }
+        return json(404, { detail: { code: "not_found", message: url } });
+      })
+    );
+
+    renderScreen();
+    const button = await screen.findByTestId("dial.refresh-button");
+    expect(button).toHaveTextContent("Обновить статус (1)"); // one mover in the shelf scope
+
+    await user.click(button);
+
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(JSON.parse(posted[0])).toEqual({ no_sprint: true });
+    expect(await screen.findByTestId("dial.refresh-notice")).toHaveTextContent(
+      "Переведено в работу: 1",
     );
   });
 });

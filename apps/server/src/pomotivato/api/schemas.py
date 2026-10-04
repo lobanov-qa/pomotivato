@@ -227,6 +227,12 @@ class TaskCloneDto(BaseModel):
 class SessionCreateDto(BaseModel):
     day_plan_id: str
     settings: SessionSettingsDto | None = None
+    # V17 red. 5.6 (spec 07 §5.6): the scope the start happens in. Omit both
+    # to keep the pre-E4c behavior (any «В работе» card backs the plan);
+    # sprint_id filters the slots to that container and requires the sprint
+    # to cover today; no_sprint=true keeps only dateless-shelf cards.
+    sprint_id: str | None = None
+    no_sprint: bool = False
 
 
 class SegmentDto(BaseModel):
@@ -493,6 +499,29 @@ class CarryAllResultDto(BaseModel):
     """POST /api/sprints/{id}/carry-choice-all: how many cards were frozen."""
 
     decided: int
+
+
+class RefreshStatusDto(BaseModel):
+    """POST /api/day-plans/{date}/refresh-status body (spec 07 §6, A4/V25).
+
+    Exactly one scope answer, same grammar as the task list filters:
+    {sprint_id: X} or {no_sprint: true}. No body field is not a scope.
+    """
+
+    sprint_id: str | None = None
+    no_sprint: bool = False
+
+    def scope(self) -> tuple[str | None, bool]:
+        if not self.no_sprint and self.sprint_id is None:
+            msg = "refresh-status needs a scope: sprint_id or no_sprint=true"
+            raise ValidationError(msg)
+        return (None, True) if self.no_sprint else (self.sprint_id, False)
+
+
+class RefreshResultDto(BaseModel):
+    """How many cards the scope just moved into «В работе»."""
+
+    moved: int
 
 
 class DayPlanAddDto(BaseModel):

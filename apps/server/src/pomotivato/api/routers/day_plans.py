@@ -8,9 +8,17 @@ from http import HTTPStatus
 from fastapi import APIRouter, Response
 
 from pomotivato.api.deps import ClockDep, DbSession
-from pomotivato.api.schemas import AddResultDto, DayPlanAddDto, DayPlanDto, MoveSlotDto
+from pomotivato.api.schemas import (
+    AddResultDto,
+    DayPlanAddDto,
+    DayPlanDto,
+    MoveSlotDto,
+    RefreshResultDto,
+    RefreshStatusDto,
+)
 from pomotivato.core.errors import ValidationError
 from pomotivato.services.day_plan_service import DayPlanService
+from pomotivato.services.task_service import TaskService
 
 router = APIRouter(prefix="/api/day-plans", tags=["day-plans"])
 
@@ -74,3 +82,28 @@ async def add_task_to_day(
     return AddResultDto(
         plan=DayPlanDto.from_core(plan), added=list(outcome.added), skipped=list(outcome.skipped)
     )
+
+
+@router.post("/{plan_date}/refresh-status", response_model=RefreshResultDto)
+async def refresh_status(
+    plan_date: date,
+    dto: RefreshStatusDto,
+    session: DbSession,
+    clock: ClockDep,
+) -> RefreshResultDto:
+    """«Обновить статус» (spec 07 §6, A4/V25): carry the scope's today cards in.
+
+    The whole move is all-or-nothing: a V25 overflow refuses the request and
+    nothing moved (the transaction that would carry the writes never opens
+    them — the limit check happens before the first status write). The date
+    is path-supplied; past dates are refused like every other planning
+    surface (⚑ Q4).
+    """
+    if plan_date < clock.now().date():
+        msg = f"day plan for {plan_date.isoformat()} is in the past"
+        raise ValidationError(msg)
+    sprint_id, no_sprint = dto.scope()
+    moved = await TaskService(session, clock).refresh_scope(
+        plan_date, sprint_id=sprint_id, no_sprint=no_sprint
+    )
+    return RefreshResultDto(moved=moved)

@@ -37,7 +37,9 @@ async def create_session(
         settings = dto.settings.to_core()
     else:
         settings = await SettingsService(session).get_session_settings()
-    view = await _service(session, clock, registry).start(plan, settings)
+    view = await _service(session, clock, registry).start(
+        plan, settings, sprint_id=dto.sprint_id, no_sprint=dto.no_sprint
+    )
     return SessionDto.from_view(view)
 
 
