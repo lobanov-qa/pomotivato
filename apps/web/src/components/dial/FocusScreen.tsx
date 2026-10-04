@@ -22,6 +22,8 @@ import { useHints } from "@/features/science/hooks";
 import { parseOverCount, refreshCandidates, startScope, swapSector } from "@/features/kanban/focusPlan";
 import { invalidateBoard, useTasks } from "@/features/kanban/hooks";
 import { deriveSlots, planIdForDate } from "@/features/kanban/planner";
+import { TimerSignal } from "@/features/dial/signal";
+import { useTabTitle } from "@/features/dial/useTabTitle";
 import { useSessionEvents } from "@/features/dial/useSessionEvents";
 import { useSprints } from "@/features/sprints/hooks";
 import {
@@ -53,6 +55,10 @@ export function FocusScreen() {
   const { sprints } = useSprints();
   const { data: settings } = useUiSettings();
   const maxInWork = settings?.ui.max_in_work ?? 6;
+  const soundEnabled = settings?.ui.sound_enabled ?? true;
+  // A21 (§10.10): chimes ride the audio clock, never a throttled interval;
+  // the context appears only at the Start gesture (autoplay policy).
+  const signal = useMemo(() => new TimerSignal(), []);
   // The scope is the one the board chose (§4.4: shared with «Задачи»):
   // ?sprint=<id|none>, default = today's sprint else the shelf.
   const [scopeOverride, setScopeOverride] = useState<ScopeId | undefined>(readScopeParam);
@@ -223,6 +229,7 @@ export function FocusScreen() {
         const date = today();
         // V17 red. 5.6: the start is scoped — the server answers 409 when
         // the selected sprint doesn't cover today; the UI warns first.
+        signal.attach(); // the first gesture unlocks audio (§10.10 p.1)
         const scopeBody = scope === null ? { no_sprint: true } : { sprint_id: scope };
         const planId = await api
           .putDayPlan({ id: planIdForDate(date), date, slots: prePlan })
@@ -265,6 +272,19 @@ export function FocusScreen() {
     session?.phase === "special_break";
   const paused = session?.state === "paused";
 
+  // §10.10 p.2: plan the signal when a phase BEGINS (SSE moved phase or
+  // its end) using the server-fresh remaining; pause/stop drops the chime
+  // — a frozen remaining is not a deadline.
+  const phaseKey = `${sessionId ?? "-"}|${session?.phase ?? "-"}|${session?.phase_ends_at ?? "-"}`;
+  useEffect(() => {
+    if (!session || !running || paused || !soundEnabled) {
+      signal.cancel();
+      return;
+    }
+    signal.schedule(session.remaining_sec);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phaseKey, soundEnabled]);
+
   // Break-time science (spec 05 §3.6): refetch the hint card on every phase
   // change — the server already knows the live phase and open-block burn.
   const hintsQuery = useHints(running && isBreak);
@@ -273,6 +293,11 @@ export function FocusScreen() {
     if (running && isBreak) void hintsQuery.refetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phaseForHints]);
+
+  const phaseLabelForTitle = running && session?.phase
+    ? t(`dial.phase-${session.phase}` as "dial.phase-work")
+    : "";
+  useTabTitle(t("app.name"), phaseLabelForTitle, running && !paused ? remainingSec : null);
 
   return (
     <div className="flex flex-col items-center gap-5" data-testid="dial.screen">

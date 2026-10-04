@@ -43,6 +43,9 @@ class UiSettings:
     # excess goes to ARCHIVED immediately (author's live DB starts empty,
     # so the default never touched existing data).
     done_visible_limit: int = DEFAULT_DONE_VISIBLE_LIMIT
+    # A21 (spec 07 §4.9/§8): the timer signal switch. Presentation-only —
+    # it never gates a rule; the AudioContext is a browser concern.
+    sound_enabled: bool = True
 
 
 class SettingsService:
@@ -75,6 +78,7 @@ class SettingsService:
             bool(data.get("require_science_fields", False)),
             bool(data.get("wet_hints", True)),
             int(data.get("done_visible_limit", DEFAULT_DONE_VISIBLE_LIMIT)),
+            bool(data.get("sound_enabled", True)),
         )
 
     async def put_ui_settings(
@@ -84,6 +88,7 @@ class SettingsService:
         require_science_fields: bool = False,
         wet_hints: bool = True,
         done_visible_limit: int = DEFAULT_DONE_VISIBLE_LIMIT,
+        sound_enabled: bool = True,
     ) -> None:
         if not 1 <= max_in_work <= 12:
             msg = f"max_in_work must be 1..12, got {max_in_work}"
@@ -103,6 +108,7 @@ class SettingsService:
                     "require_science_fields": bool(require_science_fields),
                     "wet_hints": bool(wet_hints),
                     "done_visible_limit": int(done_visible_limit),
+                    "sound_enabled": bool(sound_enabled),
                 }
             ),
         )

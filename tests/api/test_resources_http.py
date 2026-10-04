@@ -251,6 +251,7 @@ def test_settings_roundtrip_and_v5_rejection(http_app):
             "require_science_fields": False,
             "wet_hints": True,
             "done_visible_limit": 10,
+            "sound_enabled": True,
         },
     }
 
@@ -295,6 +296,7 @@ def test_ui_settings_roundtrip_keeps_session_key(http_app):
         "require_science_fields": False,
         "wet_hints": True,
         "done_visible_limit": 10,
+        "sound_enabled": True,
     }
     assert after["session"] == before  # keys are independent (spec 03 §9)
 
@@ -338,6 +340,24 @@ def test_ui_wet_hints_toggles_off_and_back_when_timer_first(http_app):
         },
     )
     assert on.json()["wet_hints"] is True
+
+
+@pytest.mark.api
+def test_ui_sound_switch_roundtrips_and_defaults_on(http_app):
+    """A21 (spec 07 §1 p.22): the chime switch is a persisted ui flag, on
+    by default — silence is the opt-in, not the surprise."""
+    default = http_app.get("/api/settings").json()["ui"]
+    assert default["sound_enabled"] is True
+
+    off = http_app.put(
+        "/api/settings/ui",
+        json={"max_in_work": 6, "theme": "auto", "sound_enabled": False},
+    )
+    assert off.status_code == HTTPStatus.OK
+
+    after = http_app.get("/api/settings").json()["ui"]
+    assert after["sound_enabled"] is False
+    assert after["wet_hints"] is True  # untouched neighbors keep their defaults
 
 
 @pytest.mark.api

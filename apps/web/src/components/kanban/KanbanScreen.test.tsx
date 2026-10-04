@@ -94,6 +94,7 @@ const SETTINGS_ON = {
     require_science_fields: false,
     wet_hints: true,
     done_visible_limit: 10,
+    sound_enabled: true,
   },
 };
 

@@ -77,6 +77,8 @@ export interface UiSettingsDto {
   require_science_fields: boolean;
   wet_hints: boolean;
   done_visible_limit: number;
+  /** A21: the timer sound switch (AudioContext is a browser concern). */
+  sound_enabled: boolean;
 }
 
 export interface SettingsBundleDto {
