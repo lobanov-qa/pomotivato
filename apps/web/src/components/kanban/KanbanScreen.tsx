@@ -1,6 +1,7 @@
 import {
   DndContext,
   DragOverlay,
+  MeasuringStrategy,
   PointerSensor,
   useSensor,
   useSensors,
@@ -331,7 +332,17 @@ export function KanbanScreen() {
       {isLoading && <p className="text-sm text-muted-foreground">…</p>}
       {loadError && <p className="text-sm text-danger">{t("error.network")}</p>}
 
-      <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd} onDragCancel={() => setDraggedId(null)}>
+      {/* DF22 (author 15.10: cards needed a SECOND drag to land): optimistic
+          moves + invalidateBoard re-render the columns mid-flight, so the
+          droppable rects cached at dragStart go stale and the first drop
+          finds no `over`. Measuring always keeps the rects live. */}
+      <DndContext
+        sensors={sensors}
+        measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragCancel={() => setDraggedId(null)}
+      >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {BOARD_COLUMNS.map((column) => {
             // Scope = the columns' content entirely (spec 07 §4.3). The

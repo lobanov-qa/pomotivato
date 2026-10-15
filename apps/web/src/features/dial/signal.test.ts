@@ -138,9 +138,9 @@ describe("tab title (pure per §10.14)", () => {
     );
   });
 
-  it("a running phase carries the countdown", () => {
+  it("a running phase carries the countdown FIRST (DF23 tab truncation)", () => {
     expect(
       formatTabTitle({ appName: "Pomotivato", phaseLabel: "Работа", remainingSec: 1450 }),
-    ).toBe("Pomotivato · Работа 24:10");
+    ).toBe("24:10 Работа · Pomotivato");
   });
 });

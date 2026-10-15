@@ -9,7 +9,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { SprintDto } from "@/api/client";
-import { useSprints } from "@/features/sprints/hooks";
+import { usePatchSprint, useSprints } from "@/features/sprints/hooks";
 import {
   hasUndecidedFate,
   sprintColor,
@@ -25,13 +25,30 @@ import { SprintModal } from "./SprintModal";
  * Self-contained section: the row click opens the sprint card right here
  * (a second owner of the same modal as the band — the sections never show
  * simultaneously, and lifting the state to WeekScreen would only spread
- * the wiring without sharing a view).
+ * the wiring without sharing a view). DF21 (author 15.10): the lifecycle
+ * verbs live HERE, in the «Спринты» column — the band above only creates.
+ * A planned row carries its own "Активировать" button (V20 re-checks on
+ * the server; the refusal text shows inline), an active row completes
+ * through the card, where the fate menu must be reached first (V34).
  */
 export function SprintList() {
   const { sprints } = useSprints();
+  const patch = usePatchSprint();
   const [open, setOpen] = useState<SprintDto | null>(null);
+  const [activateError, setActivateError] = useState<string | null>(null);
   const today = todayIso();
   const rows = sprintList(sprints, today);
+
+  function activate(sprint: SprintDto): void {
+    setActivateError(null);
+    patch.mutate(
+      { id: sprint.id, changes: { status: "active" } },
+      {
+        onError: (error: Error) => setActivateError(error.message || null),
+      },
+    );
+  }
+
   return (
     <section className="flex flex-col gap-1" data-testid="sprint.list">
       <div className="flex items-center justify-between">
@@ -74,6 +91,17 @@ export function SprintList() {
                 {t(`sprint.status-${sprintStatusKey(sprint, today)}` as "sprint.status-created")}
               </span>
             </button>
+            {sprint.status === "planned" && (
+              <button
+                type="button"
+                data-testid={`sprint.row-activate-${sprint.id}`}
+                disabled={patch.isPending}
+                onClick={() => activate(sprint)}
+                className="shrink-0 rounded-md border border-primary px-2 py-0.5 text-xs text-primary hover:bg-primary/10"
+              >
+                {t("sprint.activate")}
+              </button>
+            )}
             {hasUndecidedFate(sprint) && (
               <span
                 data-testid={`sprint.fate-badge-${sprint.id}`}
@@ -86,6 +114,11 @@ export function SprintList() {
           </div>
         );
       })}
+      {activateError && (
+        <p className="text-xs text-danger" data-testid="sprint.activate-error">
+          {activateError}
+        </p>
+      )}
       {open && (
         <SprintModal
           sprint={open}

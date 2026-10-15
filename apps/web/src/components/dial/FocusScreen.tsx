@@ -501,7 +501,10 @@ export function FocusScreen() {
               }
             >
               <span className="font-mono text-xs">{i + 1}</span>
-              {i < workDone && !isBreak && (
+              {/* DF24: a passed block keeps its check during breaks too —
+                  the progress the dial earned must not blink out between
+                  sectors (author's dogfood: "галки видны всегда") */}
+              {i < workDone && (
                 <Check className="h-4 w-4 shrink-0 text-col-done" data-testid={`dial.legend-done-${i + 1}`} />
               )}
               <span className="truncate">{title}</span>

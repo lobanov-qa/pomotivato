@@ -41,6 +41,20 @@ const COMPLETED = {
   is_current: false,
 };
 
+const PLANNED = {
+  id: "s-plan",
+  number: 3,
+  name: null,
+  start_date: "2027-01-01",
+  end_date: "2027-01-07",
+  goal: null,
+  done_criteria: null,
+  status: "planned",
+  unfinished_count: 0,
+  carry_pending: 0,
+  is_current: false,
+};
+
 const CARD = {
   id: "c-1",
   title: "Undecided card",
@@ -77,8 +91,12 @@ beforeEach(() => {
       const url = new URL(String(input), "http://x");
       const json = (body: unknown, status = 200) =>
         new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-      if (url.pathname === "/api/sprints") return json([ACTIVE, COMPLETED]);
+      if (url.pathname === "/api/sprints") return json([ACTIVE, COMPLETED, PLANNED]);
       if (url.pathname === "/api/sprints/s-old") return json({ ...COMPLETED, tasks: [CARD] });
+      if (url.pathname === "/api/sprints/s-plan" && init?.method === "PATCH") {
+        posted.push({ url: url.pathname, method: "PATCH", body: JSON.parse(String(init?.body)) });
+        return json({ ...PLANNED, status: "active" });
+      }
       if (url.pathname.endsWith("/carry-choice") || url.pathname.endsWith("/carry-choice-all")) {
         posted.push({ url: url.pathname, method: String(init?.method), body: JSON.parse(String(init?.body)) });
         return json({ ...CARD, carry_choice: "moved" });
@@ -124,5 +142,18 @@ describe("SprintList", () => {
     await userEvent.selectOptions(menu, "shelf");
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0].body).toEqual({ target_sprint_id: null });
+  });
+
+  it("a planned row activates from the list itself (DF21)", async () => {
+    renderList();
+    const button = await screen.findByTestId("sprint.row-activate-s-plan");
+
+    await userEvent.click(button);
+
+    await waitFor(() =>
+      expect(
+        posted.some((p) => p.method === "PATCH" && (p.body as { status?: string }).status === "active"),
+      ).toBe(true),
+    );
   });
 });
