@@ -77,6 +77,14 @@ describe("refreshCandidates (§5.2)", () => {
     const tasks = [task({ id: "shelf", sprint_id: null }), task({ id: "owned" })];
     expect(refreshCandidates(tasks, null, today).map((t) => t.id)).toEqual(["shelf"]);
   });
+
+  it("a card whose day is already worked stays out of the bulk walk (DF25)", () => {
+    const tasks = [
+      task({ id: "spent", last_worked: today }),
+      task({ id: "fresh", last_worked: "2026-10-04" }),
+    ];
+    expect(refreshCandidates(tasks, "s-1", today).map((t) => t.id)).toEqual(["fresh"]);
+  });
 });
 
 describe("parseOverCount (V25 wire text)", () => {

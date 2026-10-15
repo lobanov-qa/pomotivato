@@ -11,6 +11,7 @@ SHELF cards stay out of the selection (§5.2 formula, sprint scope only).
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import timedelta
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any
@@ -136,6 +137,76 @@ def test_refresh_refuses_the_whole_move_when_the_limit_breaks(
     message = bad.json()["detail"]["message"]
     assert "1 of 1 in work" in message and "1 more to move" in message
     assert status_of(client, "t-b") == "backlog"  # refused as a whole (A4)
+
+
+@pytest.mark.api
+def test_refresh_skips_a_card_whose_today_is_already_worked(
+    focus_app: tuple[TestClient, FakeClock],
+) -> None:
+    """DF25 (author 15.10): a multi-day card V22 walked back to «Запланировано»
+    after working its day must not be pulled into work again the SAME day —
+    the bulk walk is not a second run of a spent day (manual A17 stays)."""
+    client, clock = focus_app
+    sprint = make_sprint(client, TODAY, "2026-09-07")
+    tomorrow = (clock.now().date() + timedelta(days=1)).isoformat()
+    make_task(client, "t-two-days", sprint_id=sprint, **ticked(TODAY, tomorrow))
+    move_to(client, "t-two-days", "planned", "doing")
+    plan_id = put_plan(client, ["t-two-days"])
+    started = client.post(
+        "/api/sessions",
+        json={"day_plan_id": plan_id, "sprint_id": sprint},
+    )
+    assert started.status_code == HTTPStatus.CREATED, started.text
+    session = started.json()
+    clock.advance(timedelta(minutes=26))  # work_min 25: the block closes on read
+    view = client.get(f"/api/sessions/{session['id']}").json()
+    block = next(
+        seg for seg in view["timeline"] if seg["phase"] == "work" and seg["status"] == "completed"
+    )
+
+    verdict = client.post("/api/reviews", json={"segment_id": block["id"], "score": 3})
+    assert verdict.status_code == HTTPStatus.CREATED, verdict.text
+    assert status_of(client, "t-two-days") == "planned"  # V22: a future tick remains
+
+    response = client.post(f"/api/day-plans/{TODAY}/refresh-status", json={"sprint_id": sprint})
+
+    assert response.status_code == HTTPStatus.OK
+    assert response.json() == {"moved": 0}  # the spent day is not re-run (DF25)
+    assert status_of(client, "t-two-days") == "planned"
+
+
+@pytest.mark.api
+def test_refresh_materializes_the_plan_so_the_fold_leaves_the_card_in_work(
+    focus_app: tuple[TestClient, FakeClock],
+) -> None:
+    """DF26 (author 15.10): «moved: 1» must not evaporate on the next board
+    read — V30 folds every DOING card with no sector in today's plan, so
+    the refresh appends the movers' chunks to the plan itself, and the
+    card's next ticked day carries it back in and keeps it there."""
+    client, clock = focus_app
+    sprint = make_sprint(client, TODAY, "2026-09-07")
+    day2 = (clock.now().date() + timedelta(days=1)).isoformat()
+    make_task(client, "t-two", sprint_id=sprint, **ticked(TODAY, day2))
+
+    first = client.post(f"/api/day-plans/{TODAY}/refresh-status", json={"sprint_id": sprint})
+
+    assert first.json() == {"moved": 1}
+    plan = client.get(f"/api/day-plans/{TODAY}").json()
+    assert [s["task_id"] for s in plan["slots"]] == ["t-two"]
+    listed = {t["id"]: t for t in client.get("/api/tasks").json()}
+    assert listed["t-two"]["status"] == "doing"  # the fold has a sector to honour
+
+    # A day passes with no further work: the V30 fold returns the card...
+    clock.advance(timedelta(days=1))
+    folded = {t["id"]: t for t in client.get("/api/tasks").json()}
+    assert folded["t-two"]["status"] == "planned"
+
+    # ...and the next ticked day moves it in for real (the author's flow).
+    second = client.post(f"/api/day-plans/{day2}/refresh-status", json={"sprint_id": sprint})
+
+    assert second.json() == {"moved": 1}  # worked_yesterday does not block today
+    after = {t["id"]: t for t in client.get("/api/tasks").json()}
+    assert after["t-two"]["status"] == "doing"  # and it stays there
 
 
 @pytest.mark.api

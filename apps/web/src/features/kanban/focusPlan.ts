@@ -9,7 +9,11 @@
 import type { SprintDto, TaskDto } from "@/api/client";
 import { isTicked } from "./recurrence";
 
-/** §5.2 selection: scope ∩ (backlog|planned) ∩ ticked today ∩ timer. */
+/** §5.2 selection: scope ∩ (backlog|planned) ∩ ticked today ∩ timer.
+ * DF25 (author 15.10): a card whose TODAY is already worked (last_worked
+ * equals today — the server scan agrees via work_blocks_on) stays out:
+ * the bulk walk must not run a spent day again; manual re-entry (A17)
+ * is a different door. */
 export function refreshCandidates(
   tasks: TaskDto[],
   scope: string | null,
@@ -20,6 +24,7 @@ export function refreshCandidates(
       task.sprint_id === scope &&
       (task.status === "backlog" || task.status === "planned") &&
       !task.no_timer &&
+      (task.last_worked ?? "") !== today &&
       isTicked(task.recurrence, today),
   );
 }

@@ -6,6 +6,7 @@ only sequences reads/writes and turns core outcomes into infra errors.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import date
 from typing import Any
@@ -28,6 +29,7 @@ from pomotivato.core.errors import (
 )
 from pomotivato.core.models import (
     CarryChoice,
+    DayPlan,
     Once,
     OnDates,
     SprintStatus,
@@ -37,6 +39,7 @@ from pomotivato.core.models import (
 )
 from pomotivato.core.trim import excess_done
 from pomotivato.core.validation import (
+    validate_day_plan,
     validate_deadline_realism,
     validate_planning_ready,
     validate_status_transition,
@@ -46,6 +49,7 @@ from pomotivato.core.validation import (
 from pomotivato.infra.errors import ConflictError, NotFoundError
 from pomotivato.infra.repository import DayPlanRepository, SprintRepository, TaskRepository
 from pomotivato.infra.repository_sessions import SegmentRepository, SessionRepository
+from pomotivato.services.planner import add_task_to_plan
 from pomotivato.services.settings_service import SettingsService
 
 # Fields PATCH may touch; everything else is identity or derived.
@@ -255,11 +259,18 @@ class TaskService:
         """«Обновить статус» (V25/A4, spec 07 §5.2): carry today's cards to work.
 
         Selection (§5.2 formula): scope ∩ (backlog|planned) ∩ ticked today ∩
-        timer-carrying. The move is all-or-nothing: when the funnel would
-        overflow, the refusal names the numbers and NOTHING moved (V25 —
-        the author's A4: a partial activation is worse than none). The
-        per-card door is set_status, so every mover also gets its A28
-        auto-mark and the sprint-window guards for free.
+        timer-carrying ∩ NOT already worked today (DF25: a multi-day card
+        whose today is spent lives in «Запланировано» by V22 — pulling it
+        back into work the same day would run the day twice; the manual
+        A17 re-entry stays, this is about the automatic bulk walk).
+        The move is all-or-nothing: when the funnel would overflow, the
+        refusal names the numbers and NOTHING moved (V25 — the author's A4:
+        a partial activation is worse than none). The per-card door is
+        set_status, so every mover also gets its A28 auto-mark and the
+        sprint-window guards for free. DF26: the movers are then appended
+        to the day plan — a DOING card without a sector is exactly what the
+        V30 fold undoes on the next board read, which made «moved: 1»
+        contradict an empty «В работе» one request later.
         """
         candidates = [
             task
@@ -268,6 +279,8 @@ class TaskService:
             and not task.no_timer
             and day in tick_days(task)
         ]
+        worked_today = await self._segments.work_blocks_on(day)
+        candidates = [task for task in candidates if worked_today.get(task.id, 0) == 0]
         if not candidates:
             return 0
         limit = (await self._settings.get_ui_settings()).max_in_work
@@ -287,11 +300,48 @@ class TaskService:
         for task in candidates:
             if task.status is TaskStatus.BACKLOG:
                 validate_planning_ready(task, require)
+        # DF26 pre-check, before the first write: every mover needs at least
+        # one sector in the day plan or the V30 fold would undo the move on
+        # the next read — a full 12-sector day refuses like a full funnel.
+        plan, tasks_by_id = await self._draft_plan(day, candidates)
+        for task in candidates:
+            if not any(slot.task_id == task.id for slot in plan.slots):
+                msg = f"day plan is full: no free sector for task {task.id!r}"
+                raise ConflictError(msg)
         for task in candidates:
             if task.status is TaskStatus.BACKLOG:
                 await self.set_status(task.id, TaskStatus.PLANNED)
             await self.set_status(task.id, TaskStatus.DOING)
+        await self._persist_plan(plan, tasks_by_id)
         return len(candidates)
+
+    async def _draft_plan(
+        self, day: date, movers: Sequence[Task]
+    ) -> tuple[DayPlan, dict[str, Task]]:
+        """Existing plan + movers' chunks (DF26), through the same add
+        primitive the drag-to-plan uses (V10 by construction). A stale slot
+        of a card archived in another window is dropped — validate would
+        otherwise 422 a refresh whose movers fit fine."""
+        plan = await self._day_plans.get_by_date(day)
+        if plan is None:
+            plan = DayPlan(id=f"plan-{day.isoformat()}", date=day, slots=())
+        for task in movers:
+            plan = add_task_to_plan(plan, task).plan
+        tasks_by_id = await self._tasks.get_many(frozenset(slot.task_id for slot in plan.slots))
+        kept = tuple(
+            slot
+            for slot in plan.slots
+            if slot.task_id in tasks_by_id and not tasks_by_id[slot.task_id].no_timer
+        )
+        return DayPlan(id=plan.id, date=plan.date, slots=kept), tasks_by_id
+
+    async def _persist_plan(self, plan: DayPlan, tasks_by_id: dict[str, Task]) -> None:
+        """Save the drafted plan; V9 forbids an empty one (a mover without
+        sectors is refused upstream, so a drafted plan is never empty when
+        movers exist)."""
+        validate_day_plan(plan, tasks_by_id)
+        await self._day_plans.save(plan)
+        await self._session.flush()
 
     async def _require_done_clean(self, task: Task) -> None:
         """V31 (spec 07): a sprint card with a hole never reaches «Готово».
