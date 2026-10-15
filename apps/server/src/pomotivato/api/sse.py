@@ -45,17 +45,22 @@ class StreamKey:
     phase: str | None
     open_segment_id: str | None
     ended_count: int
+    # DF27: the live sector order is observable too — a reorder with no
+    # phase change must still reach every dial through the stream.
+    slot_signature: tuple[tuple[int, str], ...] = ()
 
 
 def key_of(view: SessionView) -> StreamKey:
     """Project a session view onto its observable key."""
     open_segment = next((seg for seg in view.timeline if seg.status is None), None)
     ended_count = sum(1 for seg in view.timeline if seg.status is not None)
+    slots = tuple((slot.sector, slot.task_id) for slot in (view.session.slots or ()))
     return StreamKey(
         state=view.session.state.value,
         phase=view.phase,
         open_segment_id=open_segment.id if open_segment else None,
         ended_count=ended_count,
+        slot_signature=slots,
     )
 
 
@@ -89,8 +94,10 @@ def diff_events(
                     },
                 )
             )
-    elif key.state != prev.state:
+    elif key.state != prev.state or key.slot_signature != prev.slot_signature:
         # A pause/resume keeps the same phase: replay the full honest view.
+        # A DF27 reorder keeps phase AND state but changes the sector order
+        # — the dial needs the fresh slots, so it is a snapshot too.
         events.append(("snapshot", snapshot_data(view, now)))
     return events
 

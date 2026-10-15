@@ -303,6 +303,9 @@ export const api = {
   resumeSession: (id: string) => request<SessionDto>("POST", `/api/sessions/${id}/resume`),
   stopSession: (id: string) => request<SessionDto>("POST", `/api/sessions/${id}/stop`),
   skipBreak: (id: string) => request<SessionDto>("POST", `/api/sessions/${id}/skip-break`),
+  /** DF27: live reorder of one not-yet-played sector (-1 up / +1 down). */
+  reorderSector: (id: string, sector: number, direction: -1 | 1) =>
+    request<SessionDto>("POST", `/api/sessions/${id}/reorder`, { sector, direction }),
   sessionEventsUrl: (id: string) => `/api/sessions/${id}/events`,
 
   submitReview: (body: {

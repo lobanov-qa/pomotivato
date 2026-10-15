@@ -191,6 +191,35 @@ class SessionFSM:
         self._close(live, self._now(), SegmentStatus.COMPLETED)
         self._open_segment(SegmentPhase.WORK, self._next_work_min(), self._now())
 
+    def reorder_remaining(self, sector: int, direction: int) -> bool:
+        """DF27 (spec 06 §6): swap one NOT-YET-PLAYED sector with its
+        neighbour, live. Played sectors (and the one under the hand) are
+        history — the cursor owns them; the swap only ever happens in
+        slots[cursor:]. One sector travels (A, B, A stays legal, §4.4).
+        Unknown sector or a bad direction is a 422-bound validation error;
+        an edge press (neighbour already played or past the last sector)
+        is an honest no-op. The result is densely renumbered and lands in
+        the persisted snapshot, so the next WORK opens the promoted task
+        even after a server restart (restore re-reads session.slots).
+        """
+        if direction not in (-1, 1):
+            msg = f"direction must be -1 or 1, got {direction}"
+            raise DayPlanValidationError(msg)
+        positions = {slot.sector: index for index, slot in enumerate(self._slots)}
+        if sector not in positions:
+            msg = f"sector {sector} is not in the session plan"
+            raise DayPlanValidationError(msg)
+        pos = positions[sector]
+        target = pos + direction
+        if pos < self._slot_cursor or target < self._slot_cursor or target >= len(self._slots):
+            return False
+        swapped = list(self._slots)
+        swapped[pos], swapped[target] = swapped[target], swapped[pos]
+        self._slots = tuple(
+            Slot(sector=index + 1, task_id=slot.task_id) for index, slot in enumerate(swapped)
+        )
+        return True
+
     def advance(self) -> None:
         """Apply every phase deadline that has passed (catch-up cascade).
 

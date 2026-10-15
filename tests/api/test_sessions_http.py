@@ -475,3 +475,60 @@ def test_completed_session_stays_reported_until_last_block_reviewed(http_session
 
     assert client.get("/api/status").json()["active"] is False  # day is done
     assert client.get("/api/tasks/t-2").json()["status"] == "done"
+
+
+@pytest.mark.api
+def test_reorder_swaps_unplayed_sectors_while_the_session_runs(http_session):
+    """DF27 (author 15.10): the legend arrows reorder the not-yet-played
+    tail of a LIVE session — the fresh view answers with the new order,
+    so the next WORK opens the promoted task."""
+    client, clock = http_session
+    client.post("/api/tasks", json={"id": "t-3", "title": "Third block"})
+    put_in_work(client, "t-3")
+    plan = {
+        "id": "p-1",
+        "date": DEFAULT_MOMENT.date().isoformat(),
+        "slots": [
+            {"sector": 1, "task_id": "t-1"},
+            {"sector": 2, "task_id": "t-2"},
+            {"sector": 3, "task_id": "t-3"},
+        ],
+    }
+    client.put(f"/api/day-plans/{plan['date']}", json=plan)
+    session_id = _start(client, FAST)["id"]
+
+    moved = client.post(f"/api/sessions/{session_id}/reorder", json={"sector": 3, "direction": -1})
+
+    assert moved.status_code == HTTPStatus.OK
+    assert [s["task_id"] for s in moved.json()["slots"]] == ["t-1", "t-3", "t-2"]
+
+    # the promoted task really runs next: close block 1, skip the break
+    clock.advance(timedelta(minutes=10))
+    client.get(f"/api/sessions/{session_id}")  # catch-up: the break opens
+    client.post(f"/api/sessions/{session_id}/skip-break")
+    live = client.get(f"/api/sessions/{session_id}").json()
+    open_work = next(
+        s for s in reversed(live["timeline"]) if s["phase"] == "work" and s["status"] is None
+    )
+    assert open_work["task_id"] == "t-3"  # the swap changed the next block
+
+
+@pytest.mark.api
+def test_reorder_answers_422_when_sector_is_not_in_the_plan(http_session):
+    client, _clock = http_session
+    view = _start(client, FAST)
+
+    bad = client.post(f"/api/sessions/{view['id']}/reorder", json={"sector": 9, "direction": 1})
+
+    assert bad.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+
+
+@pytest.mark.api
+def test_reorder_refuses_a_finished_session(http_session):
+    client, _clock = http_session
+    view = _start(client, FAST)
+    client.post(f"/api/sessions/{view['id']}/stop")
+
+    bad = client.post(f"/api/sessions/{view['id']}/reorder", json={"sector": 1, "direction": 1})
+
+    assert bad.status_code == HTTPStatus.CONFLICT

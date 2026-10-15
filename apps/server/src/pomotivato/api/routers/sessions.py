@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from pomotivato.api.deps import ClockDep, DbSession, RegistryDep
-from pomotivato.api.schemas import SessionCreateDto, SessionDto
+from pomotivato.api.schemas import ReorderSectorDto, SessionCreateDto, SessionDto
 from pomotivato.infra.errors import NotFoundError
 from pomotivato.infra.repository import DayPlanRepository
 from pomotivato.services.session_service import SessionService
@@ -83,4 +83,20 @@ async def skip_break_session(
     session_id: str, session: DbSession, clock: ClockDep, registry: RegistryDep
 ) -> SessionDto:
     view = await _service(session, clock, registry).command(session_id, "skip_break")
+    return SessionDto.from_view(view)
+
+
+@router.post("/{session_id}/reorder", response_model=SessionDto)
+async def reorder_sector(
+    session_id: str,
+    dto: ReorderSectorDto,
+    session: DbSession,
+    clock: ClockDep,
+    registry: RegistryDep,
+) -> SessionDto:
+    """DF27 (author 15.10): the legend arrows reorder the UNPLAYED tail of
+    a live session. The FSM enforces the law (played sectors never move);
+    the answer is the fresh view, so the dial paints the new order at once."""
+    service = _service(session, clock, registry)
+    view = await service.reorder(session_id, dto.sector, dto.direction)
     return SessionDto.from_view(view)

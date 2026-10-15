@@ -26,6 +26,7 @@ from pomotivato.core.models import (
     SegmentPhase,
     SegmentStatus,
     SessionState,
+    Slot,
 )
 from pomotivato.services.session_service import SessionView
 from tests.factories.core_models import (
@@ -140,6 +141,25 @@ def test_diff_events_replays_snapshot_instead_of_null_phase_when_boundary_pause(
 
     assert [name for name, _ in events] == ["snapshot"]
     assert events[0][1]["phase"] is None
+
+
+@pytest.mark.unit
+def test_diff_events_replays_snapshot_when_only_the_slot_order_changed():
+    """DF27: a live reorder keeps phase and state — the sector order rides
+    the projection key, so the dial sees the swap through the stream."""
+    slots = (Slot(sector=1, task_id="a"), Slot(sector=2, task_id="b"))
+    before = _view()
+    before.session = replace(before.session, slots=slots)
+    after = _view()
+    after.session = replace(
+        after.session,
+        slots=(Slot(sector=1, task_id="b"), Slot(sector=2, task_id="a")),
+    )
+
+    events = diff_events(key_of(before), after, DEFAULT_MOMENT)
+
+    assert [name for name, _ in events] == ["snapshot"]
+    assert events[0][1]["slots"] == [{"sector": 1, "task_id": "b"}, {"sector": 2, "task_id": "a"}]
 
 
 @pytest.mark.unit
