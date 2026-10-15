@@ -218,6 +218,15 @@ class SetStatusDto(BaseModel):
     to: TaskStatus
 
 
+class ReorderSectorDto(BaseModel):
+    """POST /api/sessions/{id}/reorder body (spec 06 DF27): move sector
+    `sector` one step up (-1) or down (+1) within the not-yet-played tail
+    of the live plan. Played sectors and the one under the hand refuse."""
+
+    sector: int = Field(ge=1)
+    direction: int = Field(ge=-1, le=1)
+
+
 class TaskCloneDto(BaseModel):
     """DF12: the id the client generates for the new copy (POST idiom)."""
 

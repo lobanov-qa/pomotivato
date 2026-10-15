@@ -364,6 +364,68 @@ describe("FocusScreen", () => {
     expect(screen.getByTestId("dial.pre-item-2")).toHaveTextContent("Deep work");
   });
 
+  it("reorders the unplayed tail of a live session with legend arrows (DF27)", async () => {
+    const user = userEvent.setup();
+    current = session({
+      slots: [
+        { sector: 1, task_id: "t-1" },
+        { sector: 2, task_id: "t-2" },
+        { sector: 3, task_id: "t-3" },
+      ],
+    });
+    const posted: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const json = (status: number, body: unknown) =>
+          new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+        if (url.startsWith("/api/status")) {
+          return json(200, {
+            active: true,
+            session_id: "s-1",
+            state: "running",
+            phase: "work",
+            remaining_sec: 600,
+            server_now: "2026-09-06T09:00:00+00:00",
+            date: "2026-09-06",
+          });
+        }
+        if (url.startsWith("/api/tasks")) {
+          return json(200, [
+            { ...TASKS[0], id: "t-1", title: "Alpha" },
+            { ...TASKS[0], id: "t-2", title: "Beta" },
+            { ...TASKS[0], id: "t-3", title: "Gamma" },
+          ]);
+        }
+        if (url.endsWith("/reorder") && init?.method === "POST") {
+          posted.push(String(init.body));
+          current = session({
+            slots: [
+              { sector: 1, task_id: "t-1" },
+              { sector: 2, task_id: "t-3" },
+              { sector: 3, task_id: "t-2" },
+            ],
+          });
+          return json(200, current);
+        }
+        if (url.startsWith("/api/sessions/s-1")) return json(200, current);
+        return json(404, { detail: { code: "not_found", message: url } });
+      }),
+    );
+
+    renderScreen();
+    await screen.findByTestId("dial.legend-item-3");
+
+    // the sector under the hand is history: no arrows on row 1
+    expect(screen.queryByTestId("dial.legend-up-1")).not.toBeInTheDocument();
+    expect(screen.getByTestId("dial.legend-up-2")).toBeDisabled(); // its neighbour is played
+    await user.click(screen.getByTestId("dial.legend-down-2"));
+
+    await waitFor(() => expect(posted).toEqual(['{"sector":2,"direction":1}']));
+    await waitFor(() => expect(screen.getByTestId("dial.legend-item-2")).toHaveTextContent("Gamma"));
+  });
+
   it("the refresh button shows for ticked scope cards and POSTs the scope", async () => {
     const user = userEvent.setup();
     const today = new Date().toLocaleDateString("en-CA");

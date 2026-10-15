@@ -183,6 +183,19 @@ class SessionService:
             self._registry.drop(session_id)
         return self._view(fsm)
 
+    async def reorder(self, session_id: str, sector: int, direction: int) -> SessionView:
+        """DF27 (spec 06 §6): live reorder of one not-yet-played sector.
+
+        The FSM owns the law (played sectors stay put); persistence is the
+        same mirror every command writes — the slot snapshot lives in the
+        session row, so a restart restores the NEW order and the next WORK
+        opens the promoted task. A finished row is 409 via _live_fsm.
+        """
+        fsm = await self._live_fsm(session_id)
+        fsm.reorder_remaining(sector, direction)
+        await self._persist(fsm)
+        return self._view(fsm)
+
     async def get_view(self, session_id: str) -> SessionView:
         live = self._registry.get(session_id)
         if live is not None:

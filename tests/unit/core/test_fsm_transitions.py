@@ -393,3 +393,65 @@ def test_review_rejects_break_segment_and_duplicates():  # T17 extended
     fsm.submit_review(work_id, 5)
     with pytest.raises(InvalidReviewError, match="already has a review"):
         fsm.submit_review(work_id, 1)
+
+
+@pytest.mark.unit
+def test_reorder_swaps_unplayed_sectors_when_cursor_passed_them():  # DF27
+    """Arrows move one sector of the not-yet-played tail; sectors densely
+    renumber and the session keeps running with the new order."""
+    fsm, clock = make_fsm(4)
+    fsm.start()
+    # play the first work block: sector 1 becomes history
+    advance_min(clock, 25)
+    fsm.advance()
+
+    slots = fsm.session.slots
+    assert slots is not None  # narrowing only: started sessions snapshot their slots
+    task_at_3 = slots[2].task_id
+    task_at_4 = slots[3].task_id
+
+    assert fsm.reorder_remaining(sector=4, direction=-1) is True  # sector 4 climbs
+    after = fsm.session.slots
+    assert after is not None
+    assert [s.sector for s in after] == [1, 2, 3, 4]  # densely renumbered
+    assert after[2].task_id == task_at_4
+    assert after[3].task_id == task_at_3
+
+    assert fsm.reorder_remaining(sector=3, direction=1) is True  # and back down
+    assert (fsm.session.slots or after)[2].task_id == task_at_3  # the press is reversible
+
+
+@pytest.mark.unit
+def test_reorder_refuses_to_move_a_played_sector_when_it_is_history():  # DF27
+    """Sectors behind the cursor (and the one under the hand) never swap:
+    the work already done is not a plan anymore."""
+    fsm, _clock = make_fsm(3)
+    fsm.start()
+    slots = fsm.session.slots
+    assert slots is not None
+    first_task = slots[0].task_id
+
+    assert fsm.reorder_remaining(sector=1, direction=1) is False  # under the hand
+    assert (fsm.session.slots or slots)[0].task_id == first_task  # untouched
+
+
+@pytest.mark.unit
+def test_reorder_edge_press_is_a_noop_when_no_neighbour_is_left():  # DF27
+    fsm, _clock = make_fsm(2)
+    fsm.start()
+    before = fsm.session.slots
+
+    assert fsm.reorder_remaining(sector=2, direction=1) is False  # past the last
+    assert fsm.reorder_remaining(sector=1, direction=-1) is False  # below the cursor
+    assert fsm.session.slots == before
+
+
+@pytest.mark.unit
+def test_reorder_of_unknown_sector_is_a_validation_error_when_not_in_plan():  # DF27
+    from pomotivato.core.errors import DayPlanValidationError
+
+    fsm, _clock = make_fsm(2)
+    fsm.start()
+
+    with pytest.raises(DayPlanValidationError):
+        fsm.reorder_remaining(sector=9, direction=1)

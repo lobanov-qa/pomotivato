@@ -131,6 +131,18 @@ export function FocusScreen() {
     () => (session?.slots ?? []).map((slot) => titleOf(slot.task_id)),
     [session, titleOf],
   );
+  // DF27 (author 15.10): sectors the ladder has NOT opened yet are live and
+  // may swap; played sectors (and the one under the hand) are history.
+  // cursor = closed work blocks + the open one during WORK (mirrors the
+  // FSM's _slot_cursor, so the arrows only ever offer a legal swap).
+  const played = workDone + (isWork ? 1 : 0);
+  const reorder = useMutation({
+    mutationFn: (cmd: { sector: number; direction: -1 | 1 }) =>
+      api.reorderSector(session?.id ?? "", cmd.sector, cmd.direction),
+    onSuccess: () => {
+      void refetch().catch(() => undefined);
+    },
+  });
 
   const scopeTasks = useMemo(() => tasks.filter((task) => withinScope(task, scope)), [tasks, scope]);
   const plannedToday = useMemo(
@@ -508,6 +520,32 @@ export function FocusScreen() {
                 <Check className="h-4 w-4 shrink-0 text-col-done" data-testid={`dial.legend-done-${i + 1}`} />
               )}
               <span className="truncate">{title}</span>
+              {/* DF27: the unplayed tail reorders live; played sectors and
+                  the one under the hand are history (no arrows there) */}
+              {i >= played && (
+                <span className="ml-auto flex shrink-0 gap-1">
+                  <button
+                    type="button"
+                    aria-label={t("dial.move-up")}
+                    data-testid={`dial.legend-up-${i + 1}`}
+                    disabled={i <= played || reorder.isPending}
+                    onClick={() => reorder.mutate({ sector: i + 1, direction: -1 })}
+                    className="rounded border p-1 hover:bg-muted disabled:opacity-30"
+                  >
+                    <ArrowUp className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={t("dial.move-down")}
+                    data-testid={`dial.legend-down-${i + 1}`}
+                    disabled={i >= sectorTitles.length - 1 || reorder.isPending}
+                    onClick={() => reorder.mutate({ sector: i + 1, direction: 1 })}
+                    className="rounded border p-1 hover:bg-muted disabled:opacity-30"
+                  >
+                    <ArrowDown className="h-3.5 w-3.5" />
+                  </button>
+                </span>
+              )}
               {i === sectorIndex && cueLine(session?.slots?.[i]?.task_id) && (
                 <span
                   className={cn(
