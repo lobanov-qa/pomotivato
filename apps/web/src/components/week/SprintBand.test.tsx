@@ -13,15 +13,19 @@ import { SprintBand } from "@/components/week/SprintBand";
 
 const monday = "2026-09-07";
 const post: { url: string; body: unknown }[] = [];
+let sprints: unknown[] = [];
 
 beforeEach(() => {
   post.length = 0;
+  sprints = [];
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input), "http://x");
       if (url.pathname === "/api/sprints" && (!init?.method || init.method === "GET")) {
-        return new Response("[]", { headers: { "content-type": "application/json" } });
+        return new Response(JSON.stringify(sprints), {
+          headers: { "content-type": "application/json" },
+        });
       }
       if (url.pathname === "/api/sprints" && init?.method === "POST") {
         post.push({ url: url.pathname, body: JSON.parse(String(init.body)) });
@@ -76,5 +80,30 @@ describe("SprintBand", () => {
 
     expect(screen.getByTestId("sprint.form-error")).toBeInTheDocument();
     expect(screen.getByTestId("sprint.save")).toBeDisabled();
+  });
+
+  it("the create door stays open while a sprint is active (DF21)", async () => {
+    sprints = [
+      {
+        id: "s-1",
+        number: 1,
+        name: null,
+        start_date: "2026-09-01",
+        end_date: "2026-09-30",
+        goal: null,
+        done_criteria: null,
+        status: "active",
+        unfinished_count: 0,
+        carry_pending: 0,
+        is_current: true,
+      },
+    ];
+    renderBand();
+
+    await screen.findByTestId("week.sprint-edit"); // band shows sprint #1
+    expect(screen.getByTestId("week.sprint-create")).toBeInTheDocument();
+    // activation verbs left the band: the rows in «Спринты» own them (DF21)
+    expect(screen.queryByTestId("week.sprint-activate")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("week.sprint-complete")).not.toBeInTheDocument();
   });
 });

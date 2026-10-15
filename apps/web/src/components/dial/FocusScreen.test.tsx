@@ -228,6 +228,39 @@ describe("FocusScreen", () => {
     expect(screen.getByTestId("dial.time-readout")).toHaveTextContent("10:00");
   });
 
+  it("keeps the done checks in the legend during a break (DF24)", async () => {
+    current = session({
+      phase: "break",
+      timeline: [
+        {
+          id: "s-1-0",
+          session_id: "s-1",
+          phase: "work",
+          planned_min: 10,
+          task_id: "t-1",
+          started_at: "2026-09-06T09:00:00+00:00",
+          ended_at: "2026-09-06T09:10:00+00:00",
+          status: "completed",
+        },
+        {
+          id: "s-1-1",
+          session_id: "s-1",
+          phase: "break",
+          planned_min: 5,
+          task_id: null,
+          started_at: "2026-09-06T09:10:00+00:00",
+          ended_at: null,
+          status: null,
+        },
+      ],
+    });
+    renderScreen();
+    await screen.findByTestId("dial.legend-item-2");
+
+    // the worked sector keeps its tick while the user rests (author 15.10)
+    expect(screen.getByTestId("dial.legend-done-1")).toBeInTheDocument();
+  });
+
   it("subscribes to the SSE stream of the active session", async () => {
     renderScreen();
     await waitFor(() => expect(FakeSource.instances).toHaveLength(1));

@@ -72,7 +72,7 @@ function SprintSection({ sprint }: { sprint: SprintDto }) {
           data-testid={`archive.task-${task.id}`}
           className="flex flex-wrap items-center gap-2 rounded-md border bg-card px-2 py-1 text-sm"
         >
-          <Link to={`/tasks?sprint=${sprint.id}&task=${task.id}`} className="flex-1 truncate hover:underline">
+          <Link to={`/?sprint=${sprint.id}&task=${task.id}`} className="flex-1 truncate hover:underline">
             {task.title}
           </Link>
           <span className="text-xs text-muted-foreground">{t(COLUMN_KEYS[task.status])}</span>

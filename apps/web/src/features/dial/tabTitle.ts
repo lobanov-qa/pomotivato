@@ -21,8 +21,10 @@ export function mmss(seconds: number): string {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-/** "Pomotivato · Работа 24:10"; idle -> the bare app name (§10.14). */
+/** "24:10 Работа · Pomotivato"; idle -> the bare app name (§10.14).
+ * The countdown leads (DF23): narrow tabs truncate the tail, so the timer
+ * must survive even when several tabs are open. */
 export function formatTabTitle({ appName, phaseLabel, remainingSec }: TabTitleInput): string {
   if (!phaseLabel || remainingSec === null || remainingSec < 0) return appName;
-  return `${appName} · ${phaseLabel} ${mmss(remainingSec)}`;
+  return `${mmss(remainingSec)} ${phaseLabel} · ${appName}`;
 }

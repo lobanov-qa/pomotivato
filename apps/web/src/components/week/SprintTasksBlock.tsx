@@ -2,9 +2,11 @@
  * «Задачи спринта» block of the sprint card (spec 07 §4.1.4, E4c PR 7).
  * The card lists its own tasks (status + day circles); on a completed
  * sprint the block grows the fate menu per undecided card (A40) and the
- * bulk «Оставить все как есть». Clicking a task jumps to /tasks scoped to
- * the sprint with the side panel open (the panel lives on the board — one
- * owner of card editing, §4.8: the click "opens the panel as usual").
+ * bulk «Оставить все как есть». Clicking a task jumps to the board
+ * (route "/") scoped to the sprint with the side panel open (the panel
+ * lives there — one owner of card editing, §4.8: the click "opens the
+ * panel as usual"; DF32: the old /tasks link was a dead route and hit
+ * the router's error boundary).
  */
 
 import { Link } from "react-router-dom";
@@ -69,7 +71,7 @@ export function SprintTasksBlock({ sprint, tasks, activeSprints }: Props) {
           className="flex flex-wrap items-center gap-2 rounded-md border bg-background px-2 py-1 text-sm"
         >
           <Link
-            to={`/tasks?sprint=${sprint.id}&task=${task.id}`}
+            to={`/?sprint=${sprint.id}&task=${task.id}`}
             className="flex-1 truncate hover:underline"
             data-testid={`sprint.task-open-${task.id}`}
           >
