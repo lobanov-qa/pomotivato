@@ -35,12 +35,15 @@ export function usePutUiSettings() {
   });
 }
 
-/** Applies the server theme to <html>; no-ops until settings arrive. */
+/** Applies the server theme and skin to <html>; no-ops until settings
+ * arrive. Д1: data-skin joins data-theme — the same mirror law, the CSS
+ * under html[data-skin="modern"] owns the modern palette (wave Д). */
 export function ThemeSync() {
   const { data } = useUiSettings();
   useEffect(() => {
     if (data) {
       document.documentElement.dataset.theme = data.ui.theme;
+      document.documentElement.dataset.skin = data.ui.skin;
     }
   }, [data]);
   return null;

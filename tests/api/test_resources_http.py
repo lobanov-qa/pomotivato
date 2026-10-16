@@ -253,6 +253,7 @@ def test_settings_roundtrip_and_v5_rejection(http_app):
             "done_visible_limit": 10,
             "sound_enabled": True,
             "signal_kind": "bell-trill",
+            "skin": "minimal",
         },
     }
 
@@ -299,6 +300,7 @@ def test_ui_settings_roundtrip_keeps_session_key(http_app):
         "done_visible_limit": 10,
         "sound_enabled": True,
         "signal_kind": "bell-trill",
+        "skin": "minimal",
     }
     assert after["session"] == before  # keys are independent (spec 03 §9)
 
@@ -382,6 +384,25 @@ def test_ui_signal_kind_roundtrips_and_rejects_unknown(http_app):
     )
     assert bad.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
     assert http_app.get("/api/settings").json()["ui"]["signal_kind"] == "siren"
+
+
+@pytest.mark.api
+def test_ui_skin_roundtrips_and_rejects_unknown(http_app):
+    """Д1 (wave Д): the skin is a persisted ui choice, minimal by default;
+    a wild value is a 422 and the stored skin survives."""
+    assert http_app.get("/api/settings").json()["ui"]["skin"] == "minimal"
+
+    ok = http_app.put(
+        "/api/settings/ui", json={"max_in_work": 6, "theme": "auto", "skin": "modern"}
+    )
+    assert ok.status_code == HTTPStatus.OK
+    assert http_app.get("/api/settings").json()["ui"]["skin"] == "modern"
+
+    bad = http_app.put(
+        "/api/settings/ui", json={"max_in_work": 6, "theme": "auto", "skin": "glass"}
+    )
+    assert bad.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert http_app.get("/api/settings").json()["ui"]["skin"] == "modern"
 
 
 @pytest.mark.api

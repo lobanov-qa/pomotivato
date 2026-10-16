@@ -37,6 +37,12 @@ SIGNAL_KINDS: tuple[SignalKind, ...] = (
     "chime-melody",
 )
 DEFAULT_SIGNAL_KIND: SignalKind = "bell-trill"
+# Д1 (spec 06 §6 «Скин modern», 16.10): the visual skin selector — two built
+# skins, no user theme editor (author's Д6). The server stores the choice;
+# the CSS under html[data-skin] owns the looks, exactly like data-theme.
+Skin = Literal["minimal", "modern"]
+SKINS: tuple[Skin, ...] = ("minimal", "modern")
+DEFAULT_SKIN: Skin = "minimal"
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +66,9 @@ class UiSettings:
     # DF33 (E4c-UX 5/5): which of the five synthesized signals plays at a
     # phase end. Same presentation-only law as sound_enabled.
     signal_kind: SignalKind = DEFAULT_SIGNAL_KIND
+    # Д1: the visual skin; minimal is the shipped-by-default look, modern
+    # the dark-first skin of the wave Д (presentation-only, like the rest).
+    skin: Skin = DEFAULT_SKIN
 
 
 class SettingsService:
@@ -87,6 +96,7 @@ class SettingsService:
         max_in_work = int(data.get("max_in_work", DEFAULT_MAX_IN_WORK))
         theme = data.get("theme", DEFAULT_THEME)
         signal_kind = data.get("signal_kind", DEFAULT_SIGNAL_KIND)
+        skin = data.get("skin", DEFAULT_SKIN)
         return UiSettings(
             max_in_work,
             theme if theme in ("auto", "light", "dark") else DEFAULT_THEME,
@@ -97,6 +107,7 @@ class SettingsService:
             # A stored bad value (manual DB edit, older client) falls back
             # to the default instead of poisoning every read (theme law).
             signal_kind if signal_kind in SIGNAL_KINDS else DEFAULT_SIGNAL_KIND,
+            skin if skin in SKINS else DEFAULT_SKIN,
         )
 
     async def put_ui_settings(
@@ -108,6 +119,7 @@ class SettingsService:
         done_visible_limit: int = DEFAULT_DONE_VISIBLE_LIMIT,
         sound_enabled: bool = True,
         signal_kind: SignalKind = DEFAULT_SIGNAL_KIND,
+        skin: Skin = DEFAULT_SKIN,
     ) -> None:
         if not 1 <= max_in_work <= 12:
             msg = f"max_in_work must be 1..12, got {max_in_work}"
@@ -121,6 +133,9 @@ class SettingsService:
         if signal_kind not in SIGNAL_KINDS:
             msg = f"unknown signal kind {signal_kind!r}"
             raise ValidationError(msg)
+        if skin not in SKINS:
+            msg = f"unknown skin {skin!r}"
+            raise ValidationError(msg)
         await self._repo.set(
             UI_SETTINGS_KEY,
             json.dumps(
@@ -132,6 +147,7 @@ class SettingsService:
                     "done_visible_limit": int(done_visible_limit),
                     "sound_enabled": bool(sound_enabled),
                     "signal_kind": signal_kind,
+                    "skin": skin,
                 }
             ),
         )
@@ -156,4 +172,5 @@ class SettingsService:
             ui.done_visible_limit,
             ui.sound_enabled,
             ui.signal_kind,
+            ui.skin,
         )

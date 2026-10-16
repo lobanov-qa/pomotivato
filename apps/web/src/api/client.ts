@@ -71,6 +71,10 @@ export interface SessionSettingsDto {
 
 export type ThemeName = "auto" | "light" | "dark";
 
+/** Д1 (wave Д): the two built-in skins; the CSS under html[data-skin] owns
+ * the looks. There is no user theme editor (author's Д6). */
+export type SkinName = "minimal" | "modern";
+
 /** DF33 (E4c-UX 5/5): the five synthesized phase-end signals. */
 export type SignalKind =
   | "bell-trill"
@@ -89,6 +93,8 @@ export interface UiSettingsDto {
   sound_enabled: boolean;
   /** DF33: which signal kind sound_enabled actually plays. */
   signal_kind: SignalKind;
+  /** Д1: the visual skin (minimal is the default look). */
+  skin: SkinName;
 }
 
 export interface SettingsBundleDto {

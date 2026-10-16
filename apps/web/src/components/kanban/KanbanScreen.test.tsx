@@ -96,6 +96,7 @@ const SETTINGS_ON = {
     done_visible_limit: 10,
     sound_enabled: true,
     signal_kind: "bell-trill",
+    skin: "minimal",
   },
 };
 
