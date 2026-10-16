@@ -122,6 +122,50 @@ describe("SettingsScreen", () => {
     expect(uiPut?.body).toMatchObject({ sound_enabled: false });
   });
 
+  it("Д2: modern pins the theme draft to dark and locks the theme radios", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByTestId("settings.field-work_min");
+
+    // minimal (server default): theme radios are live, no hint line
+    expect(screen.getByTestId("settings.theme-light")).toBeEnabled();
+    expect(screen.queryByTestId("settings.skin-hint")).not.toBeInTheDocument();
+    expect(screen.getByTestId("settings.skin-minimal")).toHaveAttribute("aria-checked", "true");
+
+    await user.click(screen.getByTestId("settings.skin-modern"));
+
+    // modern is dark-only (Д1): the draft flips to dark, radios stay visible
+    // but locked, and the hint explains why
+    expect(screen.getByTestId("settings.theme-dark")).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByTestId("settings.theme-light")).toBeDisabled();
+    expect(screen.getByTestId("settings.theme-auto")).toBeDisabled();
+    expect(screen.getByTestId("settings.skin-hint")).toBeInTheDocument();
+
+    await user.click(screen.getByTestId("settings.save"));
+    await waitFor(() => expect(puts).toHaveLength(2));
+    const uiPut = puts.find((p) => p.url === "/api/settings/ui");
+    expect(uiPut?.body).toMatchObject({ skin: "modern", theme: "dark" });
+  });
+
+  it("Д2: going back to minimal unlocks the theme radios again", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await screen.findByTestId("settings.field-work_min");
+
+    await user.click(screen.getByTestId("settings.skin-modern"));
+    await user.click(screen.getByTestId("settings.skin-minimal"));
+
+    expect(screen.getByTestId("settings.theme-light")).toBeEnabled();
+    // the theme draft stays dark (the pin was kept, not silently reverted)
+    expect(screen.getByTestId("settings.theme-dark")).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByTestId("settings.skin-hint")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("settings.save"));
+    await waitFor(() => expect(puts).toHaveLength(2));
+    const uiPut = puts.find((p) => p.url === "/api/settings/ui");
+    expect(uiPut?.body).toMatchObject({ skin: "minimal", theme: "dark" });
+  });
+
   it("the DF33 picker offers five shapes, PUTs the draft, hides with sound off", async () => {
     const user = userEvent.setup();
     renderScreen();

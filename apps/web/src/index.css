@@ -136,3 +136,153 @@
     border-color: var(--color-border);
   }
 }
+
+/*
+ * Wave Д (spec 06 §6 «Скин modern»): the modern skin, dark-only (Д1).
+ * It repaints through the SAME token names the whole app consumes —
+ * utilities in Tailwind v4 reference the CSS variables, so one scoped
+ * override under html[data-skin="modern"] repaints the dial, the cards,
+ * the columns and the charts without touching a single component.
+ * Minimal stays the default; nothing here applies to data-skin="minimal".
+ *
+ * Two selectors deliberately: [data-theme="dark"] is the law (the palette
+ * was authored for dark), [data-skin] alone only swaps the fonts, so a
+ * first-paint before ThemeSync resolves never lands on modern colors.
+ */
+
+/* Д2 fonts: local woff2 subsets (no CDN — the app runs offline, e.g. as a
+ * PWA). Files and subsetting from Google Fonts' public woff2 under the
+ * SIL OFL 1.1: public/fonts/*.woff2, unicode-ranges verbatim from their
+ * served CSS. Golos Text = body (excellent Cyrillic), Unbounded = display
+ * (waveform headline, dial numerals via --font-sans swap), JetBrains Mono =
+ * numbers and code-ish slots. */
+@font-face {
+  font-family: "Golos Text";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/golostext-cyrillic-ext.woff2") format("woff2");
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: "Golos Text";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/golostext-cyrillic.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "Golos Text";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/golostext-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Unbounded";
+  font-style: normal;
+  font-weight: 500 800;
+  font-display: swap;
+  src: url("/fonts/unbounded-cyrillic-ext.woff2") format("woff2");
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: "Unbounded";
+  font-style: normal;
+  font-weight: 500 800;
+  font-display: swap;
+  src: url("/fonts/unbounded-cyrillic.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "Unbounded";
+  font-style: normal;
+  font-weight: 500 800;
+  font-display: swap;
+  src: url("/fonts/unbounded-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/jetbrainsmono-cyrillic-ext.woff2") format("woff2");
+  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/jetbrainsmono-cyrillic.woff2") format("woff2");
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/jetbrainsmono-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
+    U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root[data-skin="modern"] {
+  --font-sans: "Golos Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Segoe UI Mono", monospace;
+}
+
+:root[data-skin="modern"][data-theme="dark"] {
+  /* surfaces: dark navy panels, not zinc */
+  --color-background: #0e141d;
+  --color-foreground: #e7edf5;
+  --color-card: #151d29;
+  --color-muted: #1c2635;
+  --color-muted-foreground: #8b9bb0;
+  --color-border: #243040;
+  --color-input: #243040;
+  --color-ring: #4cc9f0;
+
+  /* brand + timer phases: amber work / cyan break / mint long break
+     (the anchor palette). Special break keeps its own warm amber step so
+     it never collides with WORK (the dial sector law). */
+  --color-primary: #ffb84c;
+  --color-primary-foreground: #1a1205;
+  --color-work: #ffb84c;
+  --color-break: #4cc9f0;
+  --color-long-break: #52e0a1;
+  --color-special-break: #f97316; /* orange-500: distinct from amber work */
+  --color-warning: #f5a524;
+  --color-danger: #f87171;
+
+  /* sprint hues re-tuned brighter for the navy canvas (same order, so
+     color_idx laws hold; only the lightness moves) */
+  --color-sprint-0: #38bdf8;
+  --color-sprint-1: #c084fc;
+  --color-sprint-2: #52e0a1;
+  --color-sprint-3: #fbbf24;
+  --color-sprint-4: #f472b6;
+  --color-sprint-5: #22d3ee;
+  --color-sprint-6: #a3e635;
+
+  --color-day-planned: #4ade80; /* still a plan, never the WORK accent */
+  --color-day-missed: #f87171;
+  --color-day-worked: var(--color-primary);
+
+  /* kanban columns follow the new phases */
+  --color-col-backlog: #8b9bb0;
+  --color-col-planned: #4cc9f0;
+  --color-col-doing: #ffb84c;
+  --color-col-done: #52e0a1;
+
+  /* shape language: rounder panels, glow instead of hard borders */
+  --radius-card: 1rem;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.35), inset 0 0 0 1px rgb(255 255 255 / 0.02);
+  --shadow-card-hover: 0 8px 24px rgb(0 0 0 / 0.45), 0 0 20px rgb(76 201 240 / 0.08);
+  --shadow-card-drag: 0 18px 40px rgb(0 0 0 / 0.55);
+}
