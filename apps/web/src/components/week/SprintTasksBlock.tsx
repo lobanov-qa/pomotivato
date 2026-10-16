@@ -1,14 +1,17 @@
 /**
  * «Задачи спринта» block of the sprint card (spec 07 §4.1.4, E4c PR 7).
- * The card lists its own tasks (status + day circles); on a completed
- * sprint the block grows the fate menu per undecided card (A40) and the
- * bulk «Оставить все как есть». Clicking a task jumps to the board
- * (route "/") scoped to the sprint with the side panel open (the panel
- * lives there — one owner of card editing, §4.8: the click "opens the
- * panel as usual"; DF32: the old /tasks link was a dead route and hit
- * the router's error boundary).
+ * The card lists its own tasks (status + day circles). On a completed
+ * sprint DF29 (author 15.10) splits the list in two: the UNFINISHED cards
+ * ride on top under a direct question («есть незавершённые — перенести?»),
+ * each with its own fate menu (A40); everything else — finished cards
+ * included — stays a plain informational list below. The menu never shows
+ * on a finished card: resolve_carry refuses that with a 409 (DF30), so
+ * offering it was a lie. Clicking a task jumps to the board (route "/")
+ * scoped to the sprint with the side panel open — the panel is the one
+ * card editor (§4.8; DF32 retired the dead /tasks link).
  */
 
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type { SprintDto, TaskDto } from "@/api/client";
 import { TICK_CLASS, tickStates } from "@/features/kanban/tickStates";
@@ -32,10 +35,13 @@ const COLUMN_KEYS: Record<TaskDto["status"], MessageKey> = {
   archived: "kanban.column-archived",
 };
 
+function unfinished(task: TaskDto): boolean {
+  return task.status !== "done" && task.status !== "archived";
+}
+
 export function SprintTasksBlock({ sprint, tasks, activeSprints }: Props) {
   const carry = useCarryChoice();
   const carryAll = useCarryChoiceAll();
-  const decided = sprint.status === "completed" && sprint.carry_pending > 0;
   const today = todayIso();
 
   if (tasks.length === 0) {
@@ -46,55 +52,99 @@ export function SprintTasksBlock({ sprint, tasks, activeSprints }: Props) {
     );
   }
 
+  // DF29/DF30: the fate door opens for UNFINISHED undecided cards of a
+  // closed sprint only — the exact server predicate (carry_pending counts
+  // backlog|planned|doing with carry_choice NULL). Done cards have no fate
+  // to choose; the menu on them answered 409 ("nothing to carry").
+  const fateable =
+    sprint.status === "completed"
+      ? tasks.filter((task) => unfinished(task) && task.carry_choice === null)
+      : [];
+  const rest = tasks.filter((task) => !fateable.includes(task));
+
   return (
-    <div className="flex flex-col gap-1" data-testid="sprint.tasks">
-      <div className="flex items-center justify-between">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {t("sprint.tasks-title")}
-        </h3>
-        {decided && (
-          <button
-            type="button"
-            data-testid="sprint.fate-leave-all"
-            disabled={carryAll.isPending}
-            onClick={() => carryAll.mutate(sprint.id)}
-            className="rounded-md border px-2 py-0.5 text-xs hover:bg-muted"
-          >
-            {t("sprint.fate-leave-all")}
-          </button>
-        )}
-      </div>
-      {tasks.map((task) => (
-        <div
-          key={task.id}
-          data-testid={`sprint.task-${task.id}`}
-          className="flex flex-wrap items-center gap-2 rounded-md border bg-background px-2 py-1 text-sm"
-        >
-          <Link
-            to={`/?sprint=${sprint.id}&task=${task.id}`}
-            className="flex-1 truncate hover:underline"
-            data-testid={`sprint.task-open-${task.id}`}
-          >
-            {task.title}
-          </Link>
-          <span className="text-xs text-muted-foreground">{t(COLUMN_KEYS[task.status])}</span>
-          <DayCircles task={task} today={today} />
-          {sprint.status === "completed" && task.carry_choice === null && (
-            <FateMenu
+    <div className="flex flex-col gap-2" data-testid="sprint.tasks">
+      {fateable.length > 0 && (
+        <div className="flex flex-col gap-1" data-testid="sprint.fate-zone">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-medium" data-testid="sprint.fate-question">
+              {t("sprint.fate-question", "ru", { count: fateable.length })}
+            </p>
+            <button
+              type="button"
+              data-testid="sprint.fate-leave-all"
+              disabled={carryAll.isPending}
+              onClick={() => carryAll.mutate(sprint.id)}
+              className="shrink-0 rounded-md border px-2 py-0.5 text-xs hover:bg-muted"
+            >
+              {t("sprint.fate-leave-all")}
+            </button>
+          </div>
+          {fateable.map((task) => (
+            <TaskRow
+              key={task.id}
               task={task}
-              activeSprints={activeSprints}
-              pending={carry.isPending}
-              onChoose={(body) => carry.mutate({ taskId: task.id, body })}
+              sprint={sprint}
+              today={today}
+              menu={
+                <FateMenu
+                  task={task}
+                  activeSprints={activeSprints}
+                  pending={carry.isPending}
+                  onChoose={(body) => carry.mutate({ taskId: task.id, body })}
+                />
+              }
             />
-          )}
-          {sprint.status === "completed" && task.carry_choice !== null && (
-            <span className="text-xs text-muted-foreground" data-testid={`sprint.task-fate-${task.id}`}>
-              {task.carry_choice === "left" ? t("sprint.fate-leave") : t("sprint.fate-move", "ru", { name: "" })}
-            </span>
-          )}
+          ))}
         </div>
+      )}
+      {rest.map((task) => (
+        <TaskRow
+          key={task.id}
+          task={task}
+          sprint={sprint}
+          today={today}
+          decided={sprint.status === "completed" && task.carry_choice !== null}
+        />
       ))}
       {carry.error && <p className="text-xs text-danger">{carry.error.message}</p>}
+    </div>
+  );
+}
+
+function TaskRow({
+  task,
+  sprint,
+  today,
+  menu,
+  decided = false,
+}: {
+  task: TaskDto;
+  sprint: SprintDto;
+  today: string;
+  menu?: ReactNode;
+  decided?: boolean;
+}) {
+  return (
+    <div
+      data-testid={`sprint.task-${task.id}`}
+      className="flex flex-wrap items-center gap-2 rounded-md border bg-background px-2 py-1 text-sm"
+    >
+      <Link
+        to={`/?sprint=${sprint.id}&task=${task.id}`}
+        className="min-w-0 flex-1 break-words text-left hover:underline"
+        data-testid={`sprint.task-open-${task.id}`}
+      >
+        {task.title}
+      </Link>
+      <span className="text-xs text-muted-foreground">{t(COLUMN_KEYS[task.status])}</span>
+      <DayCircles task={task} today={today} />
+      {menu}
+      {decided && (
+        <span className="text-xs text-muted-foreground" data-testid={`sprint.task-fate-${task.id}`}>
+          {task.carry_choice === "left" ? t("sprint.fate-leave") : t("sprint.fate-move", "ru", { name: "" })}
+        </span>
+      )}
     </div>
   );
 }
@@ -144,7 +194,7 @@ function FateMenu({
       className="rounded-md border bg-background px-1 text-xs"
     >
       <option value="" disabled>
-        {t("sprint.fate-badge")}
+        {t("sprint.fate-pick")}
       </option>
       {activeSprints.map((sp) => (
         <option key={sp.id} value={sp.id}>
