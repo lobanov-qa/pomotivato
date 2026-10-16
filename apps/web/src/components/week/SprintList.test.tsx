@@ -92,7 +92,8 @@ beforeEach(() => {
       const json = (body: unknown, status = 200) =>
         new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
       if (url.pathname === "/api/sprints") return json([ACTIVE, COMPLETED, PLANNED]);
-      if (url.pathname === "/api/sprints/s-old") return json({ ...COMPLETED, tasks: [CARD] });
+      if (url.pathname === "/api/sprints/s-old")
+        return json({ ...COMPLETED, tasks: [CARD, { ...CARD, id: "c-done", title: "Finished card", status: "done" }] });
       if (url.pathname === "/api/sprints/s-plan" && init?.method === "PATCH") {
         posted.push({ url: url.pathname, method: "PATCH", body: JSON.parse(String(init?.body)) });
         return json({ ...PLANNED, status: "active" });
@@ -137,11 +138,27 @@ describe("SprintList", () => {
 
     const menu = await screen.findByTestId("sprint.fate-c-1");
     expect(screen.getByTestId("sprint.tasks-zone")).toBeInTheDocument();
+    // DF29: the zone speaks as a question, not as an abstract command
+    expect(screen.getByTestId("sprint.fate-question")).toHaveTextContent(
+      "Перенести их в другой спринт?",
+    );
 
     // "Без спринта" -> target_sprint_id: null (copy to the shelf, A40)
     await userEvent.selectOptions(menu, "shelf");
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0].body).toEqual({ target_sprint_id: null });
+  });
+
+  it("a finished card of a closed sprint gets no fate menu (DF29/DF30)", async () => {
+    // CARD in fixtures is planned (unfinished); add its finished twin below
+    // the zone and assert the menu stays away from it.
+    renderList();
+    await userEvent.click(await screen.findByTestId("sprint.row-open-s-old"));
+    await screen.findByTestId("sprint.fate-c-1");
+
+    expect(screen.queryByTestId("sprint.fate-c-done")).not.toBeInTheDocument();
+    // the finished card is still listed for information
+    expect(screen.getByTestId("sprint.task-open-c-done")).toHaveTextContent("Finished card");
   });
 
   it("a planned row activates from the list itself (DF21)", async () => {

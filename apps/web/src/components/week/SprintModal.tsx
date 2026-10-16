@@ -109,7 +109,11 @@ export function SprintModal({ sprint, windowStart, activeSprints = [], onClose }
         aria-label={t("sprint.title")}
         data-testid="sprint.modal"
         onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-sm rounded-card border bg-card p-4 shadow-card"
+        // DF31 (author 15.10): the card was too narrow to read task titles
+        // — wider by default, resizable at will (overflow-auto is what
+        // makes CSS resize bite), and it never outgrows the viewport.
+        className="w-full max-w-lg min-w-72 resize-horizontal overflow-auto rounded-card border bg-card p-4 shadow-card"
+        style={{ maxHeight: "min(85vh, 720px)" }}
       >
         <h2 className="mb-3 text-sm font-semibold">
           {sprint ? `${t("sprint.title")} ${sprint.number}` : t("week.sprint-create")}
