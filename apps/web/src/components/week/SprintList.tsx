@@ -52,7 +52,7 @@ export function SprintList() {
   return (
     <section className="flex flex-col gap-1" data-testid="sprint.list">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+        <h2 className="screen-heading text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           {t("sprint.list-title")}
         </h2>
         <Link

@@ -132,6 +132,7 @@ export function Dial({
         strokeLinecap="round"
         strokeDasharray={rimDasharray(R_RIM, phaseFraction)}
         transform={`rotate(-90 ${C} ${C})`}
+        className="dial-rim"
         data-testid="dial.rim"
       />
       {active && (
@@ -157,6 +158,7 @@ export function Dial({
         fontSize={34}
         fontWeight={600}
         fill="var(--color-foreground)"
+        className="dial-time"
         data-testid="dial.time-readout"
       >
         {formatRemaining(active ? remainingSec : 0)}

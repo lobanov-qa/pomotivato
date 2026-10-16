@@ -420,3 +420,139 @@
 :root[data-skin="modern"][data-theme="dark"] .kanban-column {
   background: color-mix(in srgb, var(--color-card) 72%, transparent);
 }
+
+/*
+ * Д4 (wave Д): density, typography and motion — the last layer of the
+ * modern skin. Same law as Д3: semantic anchors only, dark+modern scope,
+ * prefers-reduced-motion respected.
+ */
+
+/* Density: the app breathes. Wider canvas, roomier gutters, taller rows.
+ * max-w-4xl -> 6xl is a utility override by specificity (id-free but the
+ * attribute chain beats a single class), so no component churn. */
+:root[data-skin="modern"][data-theme="dark"] .app-main {
+  max-width: 72rem;
+  padding: 2.5rem 1.5rem;
+}
+:root[data-skin="modern"][data-theme="dark"] .kanban-grid {
+  gap: 1.25rem;
+}
+:root[data-skin="modern"][data-theme="dark"] .kanban-column > header {
+  padding: 0.875rem 1.25rem;
+}
+:root[data-skin="modern"][data-theme="dark"] .kanban-column > div {
+  gap: 0.75rem;
+  padding: 0.75rem;
+}
+:root[data-skin="modern"][data-theme="dark"] .task-card {
+  padding: 0.875rem 1rem 0.875rem 1.25rem;
+  border-radius: 0.9rem;
+}
+
+/* Typography: section headings become small display labels (Unbounded is
+ * wide by nature, so the size stays modest), the dial time is mono. */
+:root[data-skin="modern"][data-theme="dark"] .screen-heading {
+  font-family: "Unbounded", var(--font-sans);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--color-muted-foreground);
+}
+:root[data-skin="modern"][data-theme="dark"] .dial-time {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 40px;
+  font-weight: 700;
+}
+/* The dial rim glows in the phase color (SVG filter, cheap: one node). */
+:root[data-skin="modern"][data-theme="dark"] .dial-rim {
+  stroke-width: 4;
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+/* Motion: cards enter with a soft rise, primary numbers pop when they
+ * change (the pop class is applied by JS on value change, see pop.ts). */
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+:root[data-skin="modern"][data-theme="dark"] .task-card {
+  animation: card-in 0.22s ease-out;
+}
+@keyframes number-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+:root[data-skin="modern"][data-theme="dark"] .number-pop {
+  display: inline-block; /* transform needs a box, spans are inline */
+  animation: number-pop 0.28s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-skin="modern"][data-theme="dark"] .task-card,
+  :root[data-skin="modern"][data-theme="dark"] .number-pop {
+    animation: none;
+  }
+}
+
+/* Modals: rounder panel over a dimmed, blurred backdrop. */
+:root[data-skin="modern"][data-theme="dark"] .ui-modal {
+  border-radius: 1.25rem;
+  padding: 1.5rem;
+  box-shadow: 0 24px 64px rgb(0 0 0 / 0.55);
+}
+
+/* Focus layout (author 16.10, anchor sample): on wide screens the modern
+ * skin splits the dial screen — summary/plan/buttons flow in the left
+ * column, the dial grows and rides on the right, vertically centered.
+ * Minimal keeps the centered single column: this lives only under
+ * data-skin="modern". DOM order is untouched, so tests and keyboard flow
+ * are unaffected. (A spanning grid row looked tempting, but row-gap
+ * applies between the empty implicit rows too and stretched the canvas
+ * to 3000px — absolute positioning has no such trap.) */
+@media (min-width: 640px) {
+  :root[data-skin="modern"][data-theme="dark"] .dial-screen {
+    display: block;
+    position: relative;
+    padding-right: 48%;
+    /* The dial centers against this box; in idle the left column is
+     * shorter than the 480px dial and the centering would push its top
+     * under the sticky header. The min-height is the dial's max size. */
+    min-height: 30rem;
+  }
+  :root[data-skin="modern"][data-theme="dark"] .dial-screen > * {
+    margin-bottom: 1.25rem;
+  }
+  /* The centered utilities (items-center/text-center) made sense in the
+   * single-column minimal flow; in the left column everything rides the
+   * same edge. Attribute chain beats the single utility classes. */
+  :root[data-skin="modern"][data-theme="dark"] .dial-screen > div,
+  :root[data-skin="modern"][data-theme="dark"] .dial-screen > ol,
+  :root[data-skin="modern"][data-theme="dark"] .dial-screen > section {
+    align-items: flex-start;
+    text-align: left;
+  }
+  :root[data-skin="modern"][data-theme="dark"] .dial-screen > svg {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 46%;
+    max-width: 30rem; /* the utility cap is 360px; the dial is the hero */
+    height: auto; /* the utility h-full would stretch the square viewBox */
+    aspect-ratio: 1;
+    margin-bottom: 0;
+  }
+}

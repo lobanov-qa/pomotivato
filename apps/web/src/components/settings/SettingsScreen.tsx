@@ -105,7 +105,7 @@ function SettingsForm({ settings }: { settings: SettingsBundleDto }) {
       }}
     >
       <section className="flex flex-col gap-3" data-testid="settings.intervals">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+        <h2 className="screen-heading text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           {t("settings.section-intervals")}
         </h2>
         {INTERVAL_FIELDS.map(({ key, labelKey, min, max }) => (
@@ -153,7 +153,7 @@ function SettingsForm({ settings }: { settings: SettingsBundleDto }) {
       </section>
 
       <section className="flex flex-col gap-3" data-testid="settings.modes">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+        <h2 className="screen-heading text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           {t("settings.section-modes")}
         </h2>
         <label className="flex items-center justify-between">
@@ -204,7 +204,7 @@ function SettingsForm({ settings }: { settings: SettingsBundleDto }) {
       </section>
 
       <section className="flex flex-col gap-3" data-testid="settings.ui">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+        <h2 className="screen-heading text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           {t("settings.section-ui")}
         </h2>
         <div className="grid grid-cols-[1fr_96px] items-center gap-3">

@@ -40,7 +40,7 @@ export default function Layout() {
           </NavLink>
         </nav>
       </header>
-      <main className="mx-auto max-w-4xl px-4 py-6">
+      <main className="app-main mx-auto max-w-4xl px-4 py-6">
         <Outlet />
       </main>
     </div>
