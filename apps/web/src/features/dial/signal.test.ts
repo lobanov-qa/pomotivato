@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { TimerSignal, type AudioContextLike, playBeeps } from "./signal";
+import type { SignalKind } from "@/api/client";
+import { TimerSignal, playSignal, type AudioContextLike } from "./signal";
 import { formatTabTitle, mmss } from "./tabTitle";
 
 /**
- * Timer signal and tab title (spec 07 §1 p.22, §10.10, §10.14). §10.14
- * is law here: the title is asserted as a FUNCTION, never as document.title
- * (e2e owns the DOM later); the signal is asserted against a fake
- * AudioContext — scheduling on the audio clock is the contract.
+ * Timer signal and tab title (spec 07 §1 p.22, §10.10, §10.14; DF33 shape
+ * picker, E4c-UX 5/5). §10.14 is law here: the title is asserted as a
+ * FUNCTION, never as document.title (e2e owns the DOM later); the signal
+ * is asserted against a fake AudioContext — scheduling on the audio clock
+ * is the contract, the shapes are contracts too (start/stop windows).
  */
 
 type Call = [string, number];
@@ -23,7 +25,11 @@ function fakeCtx(startAt = 10): AudioContextLike & { calls: Call[] } {
     createOscillator: () => {
       const node = {
         type: "",
-        frequency: { value: 0 },
+        frequency: {
+          value: 0,
+          setValueAtTime: vi.fn(),
+          linearRampToValueAtTime: vi.fn(),
+        },
         connect: vi.fn(),
         start: (when: number) => calls.push(["osc-start", when]),
         stop: (when: number) => calls.push(["osc-stop", when]),
@@ -36,23 +42,61 @@ function fakeCtx(startAt = 10): AudioContextLike & { calls: Call[] } {
         value: 0,
         setValueAtTime: vi.fn(),
         linearRampToValueAtTime: vi.fn(),
+        exponentialRampToValueAtTime: vi.fn(),
       },
     }),
   };
 }
 
-describe("playBeeps (audio-clock scheduling)", () => {
-  it("parks two beeps at `when` and `when + gap`", () => {
+const startsOf = (ctx: AudioContextLike & { calls: Call[] }): number[] =>
+  ctx.calls.filter((call) => call[0] === "osc-start").map((call) => call[1]);
+const stopsOf = (ctx: AudioContextLike & { calls: Call[] }): number[] =>
+  ctx.calls.filter((call) => call[0] === "osc-stop").map((call) => call[1]);
+
+describe("playSignal (DF33 shapes on the audio clock)", () => {
+  const KINDS: SignalKind[] = [
+    "bell-trill",
+    "siren",
+    "pulse-alarm",
+    "rising-tone",
+    "chime-melody",
+  ];
+
+  it.each(KINDS)("every shape starts at `when` and ends within ~2 s: %s", (kind) => {
     const ctx = fakeCtx();
 
-    const nodes = playBeeps(ctx, 40);
+    const nodes = playSignal(kind, ctx, 40);
 
-    expect(nodes).toHaveLength(2);
-    const starts = ctx.calls.filter((call) => call[0] === "osc-start");
-    expect(starts).toEqual([
-      ["osc-start", 40],
-      ["osc-start", 40.35],
-    ]);
+    expect(nodes.length).toBeGreaterThan(0);
+    expect(startsOf(ctx)[0]).toBe(40);
+    const lastStop = Math.max(...stopsOf(ctx));
+    expect(lastStop).toBeLessThanOrEqual(42.1); // a two-second event, plus slack
+  });
+
+  it("bell-trill strikes three overlapping bells", () => {
+    const ctx = fakeCtx();
+
+    playSignal("bell-trill", ctx, 40);
+
+    const starts = [...new Set(startsOf(ctx))].sort((a, b) => a - b);
+    expect(starts).toEqual([40, 40.6, 41.2]);
+  });
+
+  it("pulse-alarm beeps nine short hits inside the window", () => {
+    const ctx = fakeCtx();
+
+    const nodes = playSignal("pulse-alarm", ctx, 40);
+
+    expect(nodes).toHaveLength(9);
+    expect(startsOf(ctx).length).toBe(9);
+  });
+
+  it("an unknown kind falls back to the default bell-trill", () => {
+    const ctx = fakeCtx();
+
+    playSignal("does-not-exist" as SignalKind, ctx, 40);
+
+    expect(startsOf(ctx).length).toBeGreaterThan(0);
   });
 });
 
@@ -78,20 +122,18 @@ describe("TimerSignal", () => {
     expect(signal.attached).toBe(true);
   });
 
-  it("schedule parks the chime at currentTime + remaining", () => {
+  it("schedule parks the chosen signal at currentTime + remaining", () => {
     const ctx = fakeCtx(10);
     const signal = new TimerSignal();
     signal.attach(() => ctx);
 
-    signal.schedule(600);
+    signal.schedule(600, "pulse-alarm");
 
-    expect(ctx.calls.filter((call) => call[0] === "osc-start")).toEqual([
-      ["osc-start", 610],
-      ["osc-start", 610.35],
-    ]);
+    expect(startsOf(ctx)[0]).toBe(610);
+    expect(startsOf(ctx).length).toBe(9); // the pulse shape, parked
   });
 
-  it("re-scheduling cancels the parked chime (a new phase, not two deadlines)", () => {
+  it("re-scheduling cancels the parked signal (a new phase, not two deadlines)", () => {
     const ctx = fakeCtx(0);
     const signal = new TimerSignal();
     signal.attach(() => ctx);
@@ -99,13 +141,13 @@ describe("TimerSignal", () => {
     signal.schedule(1200);
     signal.schedule(300);
 
-    // the first pair got stop(0) calls before the second pair was parked
+    // the first batch got stop(0) calls before the second was parked
     const stops = ctx.calls.filter((call) => call[0] === "osc-stop");
     expect(stops).toContainEqual(["osc-stop", 0]);
-    expect(stops[stops.length - 1]).not.toEqual(["osc-stop", 0]); // fresh beeps scheduled on
+    expect(stops[stops.length - 1]).not.toEqual(["osc-stop", 0]); // fresh signal scheduled on
   });
 
-  it("cancel drops a parked chime without scheduling anything", () => {
+  it("cancel drops a parked signal without scheduling anything", () => {
     const ctx = fakeCtx(0);
     const signal = new TimerSignal();
     signal.attach(() => ctx);
@@ -114,10 +156,9 @@ describe("TimerSignal", () => {
 
     signal.cancel();
 
-    expect(ctx.calls).toEqual([
-      ["osc-stop", 0],
-      ["osc-stop", 0],
-    ]);
+    const stops = stopsOf(ctx);
+    expect(stops.length).toBeGreaterThan(0);
+    expect(stops.every((stop) => stop === 0)).toBe(true);
   });
 });
 

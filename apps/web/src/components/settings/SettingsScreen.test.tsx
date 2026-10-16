@@ -28,6 +28,7 @@ const SETTINGS = {
     wet_hints: true,
     done_visible_limit: 10,
     sound_enabled: true,
+    signal_kind: "bell-trill" as const,
   },
 };
 
@@ -118,6 +119,28 @@ describe("SettingsScreen", () => {
     await waitFor(() => expect(puts).toHaveLength(2));
     const uiPut = puts.find((p) => p.url === "/api/settings/ui");
     expect(uiPut?.body).toMatchObject({ sound_enabled: false });
+  });
+
+  it("the DF33 picker offers five shapes, PUTs the draft, hides with sound off", async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    const select = await screen.findByTestId("settings.signal-kind");
+    expect(select).toHaveDisplayValue("Будильник-трель"); // default, first option
+    expect(select.querySelectorAll("option")).toHaveLength(5);
+
+    await user.selectOptions(select, "siren");
+    // the preview button exists and a click does not throw without an
+    // AudioContext (jsdom): previewSignal no-ops, saving stays the PUT door
+    await user.click(screen.getByTestId("settings.signal-preview"));
+    await user.click(screen.getByTestId("settings.save"));
+
+    await waitFor(() => expect(puts).toHaveLength(2));
+    const uiPut = puts.find((p) => p.url === "/api/settings/ui");
+    expect(uiPut?.body).toMatchObject({ signal_kind: "siren" });
+
+    // sound off hides the picker: no point choosing a shape for a mute
+    await user.click(screen.getByTestId("settings.switch-sound"));
+    expect(screen.queryByTestId("settings.signal-kind")).not.toBeInTheDocument();
   });
 
   it("enables save after an edit and PUTs both keys", async () => {

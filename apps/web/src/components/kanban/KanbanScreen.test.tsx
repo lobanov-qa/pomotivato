@@ -95,6 +95,7 @@ const SETTINGS_ON = {
     wet_hints: true,
     done_visible_limit: 10,
     sound_enabled: true,
+    signal_kind: "bell-trill",
   },
 };
 

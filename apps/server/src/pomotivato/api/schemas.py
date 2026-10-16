@@ -388,6 +388,10 @@ class UiSettingsDto(BaseModel):
     done_visible_limit: int = Field(default=10, ge=0, le=30)
     # A21 (spec 07 §8): the timer sound switch, on by default.
     sound_enabled: bool = True
+    # DF33 (E4c-UX 5/5): which synthesized signal marks a phase end.
+    signal_kind: Literal["bell-trill", "siren", "pulse-alarm", "rising-tone", "chime-melody"] = (
+        "bell-trill"
+    )
 
 
 class SettingsBundleDto(BaseModel):
