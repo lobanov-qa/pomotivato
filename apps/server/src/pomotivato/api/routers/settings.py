@@ -31,6 +31,7 @@ async def get_settings(session: DbSession) -> SettingsBundleDto:
             done_visible_limit=ui.done_visible_limit,
             sound_enabled=ui.sound_enabled,
             signal_kind=ui.signal_kind,
+            skin=ui.skin,
         ),
     )
 
@@ -54,5 +55,6 @@ async def put_ui_settings(dto: UiSettingsDto, session: DbSession) -> UiSettingsD
         dto.done_visible_limit,
         dto.sound_enabled,
         dto.signal_kind,
+        dto.skin,
     )
     return dto

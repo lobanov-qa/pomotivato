@@ -68,3 +68,4 @@ def test_ui_write_through_keeps_sound_and_signal_neighbors(database, call):
     assert ui.require_science_fields is True  # the toggle itself worked
     assert ui.sound_enabled is False  # untouched neighbors survived
     assert ui.signal_kind == "siren"
+    assert ui.skin == "minimal"  # Д1: the new key rides the write-through too

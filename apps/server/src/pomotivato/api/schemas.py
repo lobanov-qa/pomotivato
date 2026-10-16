@@ -392,6 +392,9 @@ class UiSettingsDto(BaseModel):
     signal_kind: Literal["bell-trill", "siren", "pulse-alarm", "rising-tone", "chime-melody"] = (
         "bell-trill"
     )
+    # Д1 (wave Д): the visual skin; the server stores the choice, CSS under
+    # html[data-skin] owns the looks (two built skins, no editor, Д6).
+    skin: Literal["minimal", "modern"] = "minimal"
 
 
 class SettingsBundleDto(BaseModel):

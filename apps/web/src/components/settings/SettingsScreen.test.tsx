@@ -29,6 +29,7 @@ const SETTINGS = {
     done_visible_limit: 10,
     sound_enabled: true,
     signal_kind: "bell-trill" as const,
+    skin: "minimal" as const,
   },
 };
 
