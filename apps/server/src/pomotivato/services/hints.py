@@ -9,7 +9,13 @@ Thresholds are spec 05 ⚑ Q5 (author-approved):
   interleaving  = 3 consecutive completed work blocks on one task/parent
   einstellung   = 2 interrupted work segments for one task in a day
   overlearning  = actual work minutes exceed estimate_blocks * work_min
-  frog          = frog_candidate exists, is planned today, and is untouched
+  frog          = frog_candidate exists, is planned today, and is untouched;
+                  `next_task_id` (E4c-UX 3/5, DF28) splits the wording: the
+                  frog IS the next unplayed sector (actionable as-is) or it
+                  waits later in the plan (frog-pending: pull it up with the
+                  live arrows of DF27)
+  recall        = a spaced-repetition row due today (break only): the ladder
+                  asks for its review block while the user rests
 """
 
 from __future__ import annotations
@@ -41,6 +47,8 @@ def compute_hints(
     settings: SessionSettings,
     open_task_id: str | None = None,  # WORK the user is inside right now
     open_minutes_spent: int = 0,  # minutes burned in that open segment
+    next_task_id: str | None = None,  # the unplayed sector the ladder opens next
+    due_recall_task_ids: frozenset[str] = frozenset(),  # repetitions due today
 ) -> tuple[Hint, ...]:
     """Every rule that fires, in display order; empty day -> empty list."""
     hints: list[Hint] = []
@@ -70,7 +78,24 @@ def compute_hints(
         and frog.id in plan_task_ids
         and not any(block.task_id == frog.id for block in day_blocks)
     ):
-        hints.append(Hint(kind="frog", params={"task_id": frog.id}))
+        # DF28 honesty: "start the next block with it" may only be said
+        # when the next unplayed sector IS the frog. When the frozen ladder
+        # runs something else first, the hint names the fix instead of
+        # promising the impossible — the live arrows (DF27) can swap it up.
+        kind = "frog" if next_task_id == frog.id else "frog-pending"
+        hints.append(Hint(kind=kind, params={"task_id": frog.id}))
+
+    # DF28: the spaced-repetition ladder speaks during rest too — a row due
+    # today whose card the dial is not about to open anyway. One line, the
+    # oldest due card named, so a break never becomes a second inbox.
+    if in_break and due_recall_task_ids:
+        untouched = sorted(
+            task_id
+            for task_id in due_recall_task_ids
+            if task_id != next_task_id and not any(block.task_id == task_id for block in day_blocks)
+        )
+        if untouched:
+            hints.append(Hint(kind="recall", params={"task_id": untouched[0]}))
 
     return tuple(hints)
 

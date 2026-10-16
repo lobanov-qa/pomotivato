@@ -13,6 +13,7 @@ from pomotivato.core.models import (
     Slot,
     Task,
     TaskStatus,
+    TaskType,
 )
 from pomotivato.services.blocks import WorkBlock
 from pomotivato.services.hints import Hint, compute_hints
@@ -182,8 +183,21 @@ def test_frog_hint_only_in_break_when_planned_and_untouched():
     frog = task_factory(estimate_blocks=4, status=TaskStatus.DOING, important=True)
     tasks = {frog.id: frog}
 
+    # DF28 honesty: without the next-sector answer the hint is "pending"
     on_break = compute_hints((), (), tasks, frozenset({frog.id}), in_break=True, settings=SETTINGS)
-    assert "frog" in kinds(on_break)
+    assert "frog-pending" in kinds(on_break)
+    assert "frog" not in [h.kind for h in on_break]
+
+    next_row = compute_hints(
+        (),
+        (),
+        tasks,
+        frozenset({frog.id}),
+        in_break=True,
+        settings=SETTINGS,
+        next_task_id=frog.id,
+    )
+    assert "frog" in kinds(next_row)  # the ladder really runs it next
 
     done_already = compute_hints(
         (block(frog.id, seg=1),),
@@ -193,9 +207,51 @@ def test_frog_hint_only_in_break_when_planned_and_untouched():
         in_break=True,
         settings=SETTINGS,
     )
-    assert "frog" not in kinds(done_already)
+    assert "frog" not in kinds(done_already) and "frog-pending" not in kinds(done_already)
 
     while_working = compute_hints(
         (), (), tasks, frozenset({frog.id}), in_break=False, settings=SETTINGS
     )
     assert "frog" not in kinds(while_working)
+
+
+@pytest.mark.unit
+def test_recall_names_the_due_study_card_only_in_break():
+    """DF28: a repetition row due today speaks through the break card; the
+    card the dial opens next stays silent (the hint must not nag twice)."""
+    study = task_factory(type=TaskType.STUDY)
+    tasks = {study.id: study}
+
+    fired = compute_hints(
+        (),
+        (),
+        tasks,
+        frozenset(),
+        in_break=True,
+        settings=SETTINGS,
+        due_recall_task_ids=frozenset({study.id}),
+    )
+    assert "recall" in kinds(fired)
+
+    next_sector = compute_hints(
+        (),
+        (),
+        tasks,
+        frozenset({study.id}),
+        in_break=True,
+        settings=SETTINGS,
+        due_recall_task_ids=frozenset({study.id}),
+        next_task_id=study.id,
+    )
+    assert "recall" not in kinds(next_sector)
+
+    while_working = compute_hints(
+        (),
+        (),
+        tasks,
+        frozenset(),
+        in_break=False,
+        settings=SETTINGS,
+        due_recall_task_ids=frozenset({study.id}),
+    )
+    assert "recall" not in kinds(while_working)  # rest-only, like diffuse

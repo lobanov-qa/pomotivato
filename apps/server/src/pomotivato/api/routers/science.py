@@ -61,6 +61,13 @@ async def get_hints(
             burn_sec = max(0, open_work.planned_min * 60 - view.remaining_sec)
             live.open_task_id = open_work.task_id
             live.open_minutes_spent = round(burn_sec / 60)
+        # DF28: the sector the ladder opens next is slots[cursor], and the
+        # cursor is exactly the count of work segments opened so far (the
+        # restore law of core/fsm.py — same derivation, no second state).
+        if view.session.slots:
+            opened_work = sum(1 for seg in view.timeline if seg.phase is SegmentPhase.WORK)
+            if opened_work < len(view.session.slots):
+                live.next_task_id = view.session.slots[opened_work].task_id
     hints = await HintService(session).hints_for_day(day or today, live)
     return [HintDto(kind=h.kind, params=h.params) for h in hints]
 
