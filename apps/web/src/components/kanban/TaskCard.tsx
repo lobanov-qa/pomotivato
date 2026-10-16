@@ -48,7 +48,7 @@ export function TaskCard({ task, onOpen, wetHint, isFrog }: Props) {
       {...(drag.listeners ?? {})}
       style={style}
       className={cn(
-        "group relative rounded-lg border bg-card p-3 pl-4 shadow-card transition-shadow",
+        "task-card group relative rounded-lg border bg-card p-3 pl-4 shadow-card transition-shadow",
         "before:absolute before:inset-y-1 before:left-1 before:w-1 before:rounded-full before:content['']",
         STRIPE[task.status],
         "hover:shadow-card-hover",
