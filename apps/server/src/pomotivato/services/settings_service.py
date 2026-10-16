@@ -26,6 +26,17 @@ Theme = Literal["auto", "light", "dark"]
 DEFAULT_MAX_IN_WORK = 6  # funnel law: doing == today == the dial (core MAX_SECTOR=12 ceiling)
 DEFAULT_THEME: Theme = "auto"  # spec 03 ⚑ Q9: OS-following until the toggle says otherwise
 DEFAULT_DONE_VISIBLE_LIMIT = 10  # V26 (spec 07 §4.6): «Готово» shows 10, the rest is archived
+# DF33 (spec 06 §6, E4c-UX 5/5): the phase-end signal shape, synthesized
+# browser-side; the server only stores which one. Five kinds, one default.
+SignalKind = Literal["bell-trill", "siren", "pulse-alarm", "rising-tone", "chime-melody"]
+SIGNAL_KINDS: tuple[SignalKind, ...] = (
+    "bell-trill",
+    "siren",
+    "pulse-alarm",
+    "rising-tone",
+    "chime-melody",
+)
+DEFAULT_SIGNAL_KIND: SignalKind = "bell-trill"
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +57,9 @@ class UiSettings:
     # A21 (spec 07 §4.9/§8): the timer signal switch. Presentation-only —
     # it never gates a rule; the AudioContext is a browser concern.
     sound_enabled: bool = True
+    # DF33 (E4c-UX 5/5): which of the five synthesized signals plays at a
+    # phase end. Same presentation-only law as sound_enabled.
+    signal_kind: SignalKind = DEFAULT_SIGNAL_KIND
 
 
 class SettingsService:
@@ -72,6 +86,7 @@ class SettingsService:
         data = json.loads(raw)
         max_in_work = int(data.get("max_in_work", DEFAULT_MAX_IN_WORK))
         theme = data.get("theme", DEFAULT_THEME)
+        signal_kind = data.get("signal_kind", DEFAULT_SIGNAL_KIND)
         return UiSettings(
             max_in_work,
             theme if theme in ("auto", "light", "dark") else DEFAULT_THEME,
@@ -79,6 +94,9 @@ class SettingsService:
             bool(data.get("wet_hints", True)),
             int(data.get("done_visible_limit", DEFAULT_DONE_VISIBLE_LIMIT)),
             bool(data.get("sound_enabled", True)),
+            # A stored bad value (manual DB edit, older client) falls back
+            # to the default instead of poisoning every read (theme law).
+            signal_kind if signal_kind in SIGNAL_KINDS else DEFAULT_SIGNAL_KIND,
         )
 
     async def put_ui_settings(
@@ -89,6 +107,7 @@ class SettingsService:
         wet_hints: bool = True,
         done_visible_limit: int = DEFAULT_DONE_VISIBLE_LIMIT,
         sound_enabled: bool = True,
+        signal_kind: SignalKind = DEFAULT_SIGNAL_KIND,
     ) -> None:
         if not 1 <= max_in_work <= 12:
             msg = f"max_in_work must be 1..12, got {max_in_work}"
@@ -98,6 +117,9 @@ class SettingsService:
             raise ValidationError(msg)
         if not 0 <= done_visible_limit <= 30:
             msg = f"done_visible_limit must be 0..30, got {done_visible_limit}"
+            raise ValidationError(msg)
+        if signal_kind not in SIGNAL_KINDS:
+            msg = f"unknown signal kind {signal_kind!r}"
             raise ValidationError(msg)
         await self._repo.set(
             UI_SETTINGS_KEY,
@@ -109,6 +131,7 @@ class SettingsService:
                     "wet_hints": bool(wet_hints),
                     "done_visible_limit": int(done_visible_limit),
                     "sound_enabled": bool(sound_enabled),
+                    "signal_kind": signal_kind,
                 }
             ),
         )
@@ -118,8 +141,19 @@ class SettingsService:
         return (await self.get_ui_settings()).require_science_fields
 
     async def set_require_science_fields(self, value: bool) -> None:
-        """Write-through to the ui blob (the old key is retired, ⚑ 05 F1)."""
+        """Write-through to the ui blob (the old key is retired, ⚑ 05 F1).
+
+        Every other key of the blob rides along unchanged — the earlier
+        version dropped sound_enabled (and would now drop signal_kind)
+        back to defaults on a V8 toggle write.
+        """
         ui = await self.get_ui_settings()
         await self.put_ui_settings(
-            ui.max_in_work, ui.theme, bool(value), ui.wet_hints, ui.done_visible_limit
+            ui.max_in_work,
+            ui.theme,
+            bool(value),
+            ui.wet_hints,
+            ui.done_visible_limit,
+            ui.sound_enabled,
+            ui.signal_kind,
         )

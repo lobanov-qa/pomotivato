@@ -47,3 +47,24 @@ def test_session_settings_rejected_when_minutes_out_of_v5_range(database, call):
 
     with pytest.raises(SettingsValidationError):
         asyncio.run(scenario())
+
+
+@pytest.mark.api
+def test_ui_write_through_keeps_sound_and_signal_neighbors(database, call):
+    """set_require_science_fields (V8 toggle) must not reset the A21/DF33
+    switches it does not own — the earlier version rewrote the whole blob
+    from defaults and silently re-enabled a muted timer."""
+
+    async def scenario() -> Any:
+        async with call() as svc:
+            await svc.settings.put_ui_settings(6, "auto", False, True, 10, False, "siren")
+        async with call() as svc:
+            await svc.settings.set_require_science_fields(True)
+        async with call() as svc:
+            return await svc.settings.get_ui_settings()
+
+    ui = asyncio.run(scenario())
+
+    assert ui.require_science_fields is True  # the toggle itself worked
+    assert ui.sound_enabled is False  # untouched neighbors survived
+    assert ui.signal_kind == "siren"

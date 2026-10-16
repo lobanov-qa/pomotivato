@@ -252,6 +252,7 @@ def test_settings_roundtrip_and_v5_rejection(http_app):
             "wet_hints": True,
             "done_visible_limit": 10,
             "sound_enabled": True,
+            "signal_kind": "bell-trill",
         },
     }
 
@@ -297,6 +298,7 @@ def test_ui_settings_roundtrip_keeps_session_key(http_app):
         "wet_hints": True,
         "done_visible_limit": 10,
         "sound_enabled": True,
+        "signal_kind": "bell-trill",
     }
     assert after["session"] == before  # keys are independent (spec 03 §9)
 
@@ -358,6 +360,28 @@ def test_ui_sound_switch_roundtrips_and_defaults_on(http_app):
     after = http_app.get("/api/settings").json()["ui"]
     assert after["sound_enabled"] is False
     assert after["wet_hints"] is True  # untouched neighbors keep their defaults
+
+
+@pytest.mark.api
+def test_ui_signal_kind_roundtrips_and_rejects_unknown(http_app):
+    """DF33 (E4c-UX 5/5): the signal shape is a persisted ui choice; the
+    DTO Literal turns a wild value into a 422 before any write."""
+    default = http_app.get("/api/settings").json()["ui"]
+    assert default["signal_kind"] == "bell-trill"
+
+    ok = http_app.put(
+        "/api/settings/ui",
+        json={"max_in_work": 6, "theme": "auto", "signal_kind": "siren"},
+    )
+    assert ok.status_code == HTTPStatus.OK
+    assert http_app.get("/api/settings").json()["ui"]["signal_kind"] == "siren"
+
+    bad = http_app.put(
+        "/api/settings/ui",
+        json={"max_in_work": 6, "theme": "auto", "signal_kind": "air-horn"},
+    )
+    assert bad.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert http_app.get("/api/settings").json()["ui"]["signal_kind"] == "siren"
 
 
 @pytest.mark.api

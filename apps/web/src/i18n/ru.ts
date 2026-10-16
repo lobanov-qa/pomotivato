@@ -143,6 +143,13 @@ const RU = {
   "settings.require-science": "Требовать научные поля при планировании",
   "settings.sound": "Звук таймера",
   "settings.sound-hint": "Сигнал по окончании блока и перерыва",
+  "settings.signal": "Форма сигнала",
+  "settings.signal-preview": "Прослушать",
+  "settings.signal-bell-trill": "Будильник-трель",
+  "settings.signal-siren": "Сирена",
+  "settings.signal-pulse-alarm": "Импульсный будильник",
+  "settings.signal-rising-tone": "Нарастающий тон",
+  "settings.signal-chime-melody": "Колокольчик-мелодия",
   "settings.wet-hints": "Подсвечивать незаполненные поля",
   "settings.wet-hints-hint":
     "Янтарная рамка на карточках и циферблате напоминает, что не задан план «если → то». Выключи, если тебе нужен в первую очередь таймер.",

@@ -71,6 +71,14 @@ export interface SessionSettingsDto {
 
 export type ThemeName = "auto" | "light" | "dark";
 
+/** DF33 (E4c-UX 5/5): the five synthesized phase-end signals. */
+export type SignalKind =
+  | "bell-trill"
+  | "siren"
+  | "pulse-alarm"
+  | "rising-tone"
+  | "chime-melody";
+
 export interface UiSettingsDto {
   max_in_work: number;
   theme: ThemeName;
@@ -79,6 +87,8 @@ export interface UiSettingsDto {
   done_visible_limit: number;
   /** A21: the timer sound switch (AudioContext is a browser concern). */
   sound_enabled: boolean;
+  /** DF33: which signal kind sound_enabled actually plays. */
+  signal_kind: SignalKind;
 }
 
 export interface SettingsBundleDto {

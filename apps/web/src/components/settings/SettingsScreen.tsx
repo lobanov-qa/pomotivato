@@ -9,9 +9,11 @@ import { useState } from "react";
 import type {
   SessionSettingsDto,
   SettingsBundleDto,
+  SignalKind,
   ThemeName,
   UiSettingsDto,
 } from "@/api/client";
+import { previewSignal } from "@/features/dial/signal";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { SpecialBreaksEditor } from "@/components/settings/SpecialBreaksEditor";
@@ -43,6 +45,15 @@ const THEMES: { value: ThemeName; labelKey: Parameters<typeof t>[0] }[] = [
   { value: "auto", labelKey: "settings.theme-auto" },
   { value: "light", labelKey: "settings.theme-light" },
   { value: "dark", labelKey: "settings.theme-dark" },
+];
+
+// DF33: the five signal shapes, in settings order (first = the default).
+const SIGNAL_KINDS: { value: SignalKind; labelKey: Parameters<typeof t>[0] }[] = [
+  { value: "bell-trill", labelKey: "settings.signal-bell-trill" },
+  { value: "siren", labelKey: "settings.signal-siren" },
+  { value: "pulse-alarm", labelKey: "settings.signal-pulse-alarm" },
+  { value: "rising-tone", labelKey: "settings.signal-rising-tone" },
+  { value: "chime-melody", labelKey: "settings.signal-chime-melody" },
 ];
 
 export function SettingsScreen() {
@@ -298,6 +309,41 @@ function SettingsForm({ settings }: { settings: SettingsBundleDto }) {
             />
           </button>
         </label>
+        {/* DF33 (E4c-UX 5/5): the signal shape picker. The preview plays
+            the DRAFT choice without saving — this click is a user gesture,
+            so it satisfies the autoplay law; saving is still the draft's
+            job (spec 03: no half-typed values leak). */}
+        {uiDraft.sound_enabled && (
+          <div className="flex flex-col gap-1">
+            <Label htmlFor="settings-signal-kind">{t("settings.signal")}</Label>
+            <div className="flex gap-2">
+              <select
+                id="settings-signal-kind"
+                data-testid="settings.signal-kind"
+                className="h-8 flex-1 rounded-md border border-input bg-background px-2 text-sm"
+                value={uiDraft.signal_kind}
+                onChange={(event) =>
+                  setUiDraft({ ...uiDraft, signal_kind: event.target.value as SignalKind })
+                }
+              >
+                {SIGNAL_KINDS.map(({ value, labelKey }) => (
+                  <option key={value} value={value}>
+                    {t(labelKey)}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                data-testid="settings.signal-preview"
+                onClick={() => previewSignal(uiDraft.signal_kind)}
+              >
+                {t("settings.signal-preview")}
+              </Button>
+            </div>
+          </div>
+        )}
         {/* DF6 (spec 06): presentation-only nag switch — the hard V8 gate
             above is a different law, do not merge their wordings. */}
         <label className="flex items-center justify-between gap-3">

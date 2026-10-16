@@ -56,6 +56,9 @@ export function FocusScreen() {
   const { data: settings } = useUiSettings();
   const maxInWork = settings?.ui.max_in_work ?? 6;
   const soundEnabled = settings?.ui.sound_enabled ?? true;
+  // DF33: which of the five synthesized shapes the phase-end signal plays;
+  // a mid-session change re-parks the signal at the next phase boundary.
+  const signalKind = settings?.ui.signal_kind ?? "bell-trill";
   // A21 (§10.10): chimes ride the audio clock, never a throttled interval;
   // the context appears only at the Start gesture (autoplay policy).
   const signal = useMemo(() => new TimerSignal(), []);
@@ -293,9 +296,9 @@ export function FocusScreen() {
       signal.cancel();
       return;
     }
-    signal.schedule(session.remaining_sec);
+    signal.schedule(session.remaining_sec, signalKind);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phaseKey, soundEnabled]);
+  }, [phaseKey, soundEnabled, signalKind]);
 
   // Break-time science (spec 05 §3.6): refetch the hint card on every phase
   // change — the server already knows the live phase and open-block burn.
