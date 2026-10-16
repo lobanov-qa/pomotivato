@@ -10,6 +10,7 @@ import type {
   SessionSettingsDto,
   SettingsBundleDto,
   SignalKind,
+  SkinName,
   ThemeName,
   UiSettingsDto,
 } from "@/api/client";
@@ -45,6 +46,14 @@ const THEMES: { value: ThemeName; labelKey: Parameters<typeof t>[0] }[] = [
   { value: "auto", labelKey: "settings.theme-auto" },
   { value: "light", labelKey: "settings.theme-light" },
   { value: "dark", labelKey: "settings.theme-dark" },
+];
+
+// Д2 (wave Д): the skin picker. modern is dark-only (Д1), so choosing it
+// pins the theme draft to dark — the server law stays "whatever was PUT",
+// the LOCK is presentation, which is exactly where skin lives.
+const SKINS: { value: SkinName; labelKey: Parameters<typeof t>[0] }[] = [
+  { value: "minimal", labelKey: "settings.skin-minimal" },
+  { value: "modern", labelKey: "settings.skin-modern" },
 ];
 
 // DF33: the five signal shapes, in settings order (first = the default).
@@ -233,14 +242,56 @@ function SettingsForm({ settings }: { settings: SettingsBundleDto }) {
           />
         </div>
         <div className="flex flex-col gap-1">
+          <Label>{t("settings.skin")}</Label>
+          <div className="flex gap-1" role="radiogroup" aria-label={t("settings.skin")}>
+            {SKINS.map(({ value, labelKey }) => (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={uiDraft.skin === value}
+                data-testid={`settings.skin-${value}`}
+                onClick={() =>
+                  setUiDraft(
+                    value === "modern"
+                      ? { ...uiDraft, skin: value, theme: "dark" }
+                      : { ...uiDraft, skin: value },
+                  )
+                }
+                className={cn(
+                  "flex-1 rounded-lg border px-3 py-2 text-sm transition-colors",
+                  uiDraft.skin === value
+                    ? "border-primary bg-primary/10 font-medium"
+                    : "hover:bg-muted",
+                )}
+              >
+                {t(labelKey)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
           <Label>{t("settings.theme")}</Label>
-          <div className="flex gap-1" role="radiogroup" aria-label={t("settings.theme")}>
+          {uiDraft.skin === "modern" && (
+            // Д1: the palette was authored for dark; the radios stay in the
+            // DOM (disabled) so their state is visible, not lost.
+            <p className="text-xs text-muted-foreground" data-testid="settings.skin-hint">
+              {t("settings.skin-modern-hint")}
+            </p>
+          )}
+          <div
+            className="flex gap-1"
+            role="radiogroup"
+            aria-label={t("settings.theme")}
+            aria-disabled={uiDraft.skin === "modern" || undefined}
+          >
             {THEMES.map(({ value, labelKey }) => (
               <button
                 key={value}
                 type="button"
                 role="radio"
                 aria-checked={uiDraft.theme === value}
+                disabled={uiDraft.skin === "modern"}
                 data-testid={`settings.theme-${value}`}
                 onClick={() => setUiDraft({ ...uiDraft, theme: value })}
                 className={cn(
@@ -248,6 +299,7 @@ function SettingsForm({ settings }: { settings: SettingsBundleDto }) {
                   uiDraft.theme === value
                     ? "border-primary bg-primary/10 font-medium"
                     : "hover:bg-muted",
+                  uiDraft.skin === "modern" && "cursor-not-allowed opacity-50",
                 )}
               >
                 {t(labelKey)}
