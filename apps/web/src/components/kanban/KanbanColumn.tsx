@@ -28,7 +28,7 @@ export function KanbanColumn({ column, title, count, canReceive, hint, children 
       ref={setNodeRef}
       data-testid={`kanban.column-${column}`}
       className={cn(
-        "flex min-w-0 flex-col rounded-card border bg-card/60 transition-colors",
+        "kanban-column flex min-w-0 flex-col rounded-card border bg-card/60 transition-colors",
         canReceive && "border-dashed",
         isOver && canReceive && "ring-2 ring-ring ring-offset-2 ring-offset-background",
       )}

@@ -286,3 +286,137 @@
   --shadow-card-hover: 0 8px 24px rgb(0 0 0 / 0.45), 0 0 20px rgb(76 201 240 / 0.08);
   --shadow-card-drag: 0 18px 40px rgb(0 0 0 / 0.55);
 }
+
+/*
+ * Д3 (wave Д): the modern skin's LOOK beyond tokens — ambient background,
+ * glass header, pill buttons, lifted cards, display typography. Anchored
+ * to semantic classes (.app-header, .task-card, .ui-btn, ...), never to
+ * Tailwind utilities: utilities are the components' business, the skin
+ * only answers where the component said it may. Everything below is
+ * scoped to data-skin="modern" (palette law: dark only).
+ */
+
+/* Ambient canvas: two soft glows breathing over the navy base + a film
+ * grain. The base color rides on html; body and .app-shell go transparent
+ * so the fixed pseudo-elements (z-index: -1: above the canvas, below the
+ * content) stay visible. pointer-events-none: the glow is scenery. */
+:root[data-skin="modern"][data-theme="dark"] {
+  background: var(--color-background);
+}
+:root[data-skin="modern"][data-theme="dark"] body {
+  background: transparent;
+}
+:root[data-skin="modern"][data-theme="dark"] body::before,
+:root[data-skin="modern"][data-theme="dark"] body::after {
+  content: "";
+  position: fixed;
+  inset: -20%;
+  z-index: -1;
+  pointer-events: none;
+}
+:root[data-skin="modern"][data-theme="dark"] body::before {
+  /* the cyan glow, upper left */
+  background: radial-gradient(38rem 38rem at 18% 12%, rgb(76 201 240 / 0.14), transparent 65%);
+  animation: ambient-a 46s ease-in-out infinite alternate;
+}
+:root[data-skin="modern"][data-theme="dark"] body::after {
+  /* the amber glow, lower right */
+  background: radial-gradient(42rem 42rem at 82% 88%, rgb(255 184 76 / 0.12), transparent 65%);
+  animation: ambient-b 52s ease-in-out infinite alternate;
+}
+@keyframes ambient-a {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(4%, 3%, 0) scale(1.08);
+  }
+}
+@keyframes ambient-b {
+  from {
+    transform: translate3d(0, 0, 0) scale(1.04);
+  }
+  to {
+    transform: translate3d(-3%, -4%, 0) scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Д3 law: the drift is decoration — stillness is accessibility. */
+  :root[data-skin="modern"] body::before,
+  :root[data-skin="modern"] body::after {
+    animation: none;
+  }
+}
+/* Film grain: one tiny inline SVG tile, 4% opacity. Cheap, static, rides
+ * over the glows. The shell's own bg-background utility must go transparent
+ * here, or it paints over the fixed pseudo-elements below the content. */
+:root[data-skin="modern"][data-theme="dark"] .app-shell {
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+}
+
+/* Glass header: sticky, translucent navy, hairline bottom, blur behind. */
+:root[data-skin="modern"][data-theme="dark"] .app-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: color-mix(in srgb, var(--color-background) 72%, transparent);
+  border-bottom-color: rgb(255 255 255 / 0.06);
+  backdrop-filter: blur(10px);
+}
+:root[data-skin="modern"][data-theme="dark"] .nav-brand {
+  font-family: "Unbounded", var(--font-sans);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-break));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+/* Active nav item: a glowing pill instead of an inverted block. */
+:root[data-skin="modern"][data-theme="dark"] .nav-link {
+  border-radius: 999px;
+}
+:root[data-skin="modern"][data-theme="dark"] .nav-link[aria-current="page"] {
+  background: rgb(255 184 76 / 0.14);
+  color: var(--color-primary);
+  box-shadow: inset 0 0 0 1px rgb(255 184 76 / 0.35);
+}
+
+/* Buttons: pill primary with a soft amber glow; others inherit the law. */
+:root[data-skin="modern"][data-theme="dark"] .ui-btn {
+  border-radius: 999px;
+  font-weight: 600;
+}
+:root[data-skin="modern"][data-theme="dark"] .ui-btn.bg-primary {
+  background: linear-gradient(135deg, #ffc76b, #ffb84c 55%, #f59e0b);
+  box-shadow: 0 4px 18px rgb(255 184 76 / 0.28);
+}
+:root[data-skin="modern"][data-theme="dark"] .ui-btn.bg-primary:hover {
+  box-shadow: 0 6px 24px rgb(255 184 76 / 0.4);
+}
+
+/* Inputs: rounder, glow on focus instead of a plain ring. */
+:root[data-skin="modern"][data-theme="dark"] .ui-input {
+  border-radius: 0.9rem;
+}
+:root[data-skin="modern"][data-theme="dark"] .ui-input:focus-visible {
+  box-shadow: 0 0 0 3px rgb(76 201 240 / 0.25);
+}
+
+/* Cards: hover lifts the card a hair and warms the edge; drag deepens it.
+ * transition-shadow (utility) already rides transform+box-shadow via the
+ * shorthand below — keep both in sync, no !important wars. */
+:root[data-skin="modern"][data-theme="dark"] .task-card {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+:root[data-skin="modern"][data-theme="dark"] .task-card:hover {
+  transform: translateY(-2px);
+  border-color: rgb(255 184 76 / 0.3);
+}
+:root[data-skin="modern"][data-theme="dark"] .kanban-column {
+  background: color-mix(in srgb, var(--color-card) 72%, transparent);
+}
