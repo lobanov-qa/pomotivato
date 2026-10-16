@@ -285,3 +285,42 @@ def test_review_without_new_fields_keeps_e3_shape(http_client):
     assert created.status_code == HTTPStatus.CREATED
     assert created.json()["recall_notes"] is None
     assert created.json()["reward"] is None
+
+
+@pytest.mark.api
+def test_recall_hint_fires_in_break_when_a_repetition_row_matures(http_client):
+    """DF28 on the wire: the ladder matures a study row during the break —
+    the card names the due task; the day the row was scored stays silent."""
+    client, clock = http_client
+    make_task(client, "t-s", type="study")
+    plan_for(client, TODAY, [{"sector": 1, "task_id": "t-s"}])
+    put_in_work(client, "t-s")
+    session = client.post(
+        "/api/sessions", json={"day_plan_id": f"plan-{TODAY}", "settings": FAST}
+    ).json()
+    segment_id = session["timeline"][0]["id"]
+    clock.advance(timedelta(minutes=11))
+    client.get(f"/api/sessions/{session['id']}")  # catch-up closes the block
+    client.post("/api/reviews", json={"segment_id": segment_id, "score": 4})
+    client.post(f"/api/sessions/{session['id']}/stop")
+
+    # ladder law (spec 01 §6.1): the next recall is due today+3 — not yet
+    day3 = TODAY + timedelta(days=3)
+    clock.advance(timedelta(days=3))
+    make_task(client, "t-n", estimate_blocks=2)
+    plan_for(client, day3, [{"sector": 1, "task_id": "t-n"}, {"sector": 2, "task_id": "t-n"}])
+    put_in_work(client, "t-n")
+    running = client.post(
+        "/api/sessions", json={"day_plan_id": f"plan-{day3}", "settings": FAST}
+    ).json()
+    assert running["phase"] == "work"
+
+    during_work = client.get("/api/hints").json()
+    assert all(h["kind"] != "recall" for h in during_work)  # work stays quiet
+
+    clock.advance(timedelta(minutes=11))  # work block ends -> break
+    client.get(f"/api/sessions/{running['id']}")  # catch-up
+    on_break = client.get("/api/hints").json()
+
+    recall = [h for h in on_break if h["kind"] == "recall"]
+    assert recall == [{"kind": "recall", "params": {"task_id": "t-s"}}]

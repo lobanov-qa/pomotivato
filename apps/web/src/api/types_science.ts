@@ -5,7 +5,14 @@
  * recalculates rules.
  */
 
-export type HintKind = "diffuse" | "interleaving" | "overlearning" | "einstellung" | "frog";
+export type HintKind =
+  | "diffuse"
+  | "interleaving"
+  | "overlearning"
+  | "einstellung"
+  | "frog"
+  | "frog-pending"
+  | "recall";
 
 export interface HintDto {
   kind: HintKind;

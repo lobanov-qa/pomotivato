@@ -42,4 +42,24 @@ describe("HintCard", () => {
     expect(screen.getByTestId("hints.card-einstellung")).toHaveTextContent("Серия прерываний");
     expect(screen.getByTestId("hints.card-einstellung")).not.toHaveTextContent("задача");
   });
+
+  it("places the DF28 kinds by the fixed sequence (frog-pending, recall)", () => {
+    const hints: HintDto[] = [
+      { kind: "recall", params: { task_id: "t-x" } },
+      { kind: "frog-pending", params: { task_id: "t-9" } },
+      { kind: "frog", params: { task_id: "t-9" } },
+      { kind: "diffuse", params: {} },
+    ];
+
+    render(<HintCard hints={hints} titleOf={titleOf} />);
+
+    const items = screen.getAllByTestId(/^hints\.card-/);
+    expect(items.map((item) => item.getAttribute("data-testid"))).toEqual([
+      "hints.card-diffuse",
+      "hints.card-frog",
+      "hints.card-frog-pending",
+      "hints.card-recall",
+    ]);
+    expect(items[2]).toHaveTextContent("подтяни её стрелками");
+  });
 });

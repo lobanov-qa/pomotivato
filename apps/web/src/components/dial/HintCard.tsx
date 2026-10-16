@@ -14,7 +14,15 @@ interface Props {
   titleOf: (taskId: string | null | undefined) => string;
 }
 
-const ORDER = ["diffuse", "interleaving", "overlearning", "einstellung", "frog"] as const;
+const ORDER = [
+  "diffuse",
+  "interleaving",
+  "overlearning",
+  "einstellung",
+  "frog",
+  "frog-pending",
+  "recall",
+] as const;
 
 export function HintCard({ hints, titleOf }: Props) {
   if (hints.length === 0) return null;
