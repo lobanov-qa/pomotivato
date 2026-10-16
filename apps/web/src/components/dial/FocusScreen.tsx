@@ -315,7 +315,7 @@ export function FocusScreen() {
   useTabTitle(t("app.name"), phaseLabelForTitle, running && !paused ? remainingSec : null);
 
   return (
-    <div className="flex flex-col items-center gap-5" data-testid="dial.screen">
+    <div className="dial-screen flex flex-col items-center gap-5" data-testid="dial.screen">
       {!connected && running && (
         <p className="text-xs text-warning" data-testid="dial.disconnected">
           {t("dial.disconnected")}

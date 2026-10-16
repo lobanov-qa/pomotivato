@@ -343,7 +343,7 @@ export function KanbanScreen() {
         onDragEnd={onDragEnd}
         onDragCancel={() => setDraggedId(null)}
       >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="kanban-grid grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {BOARD_COLUMNS.map((column) => {
             // Scope = the columns' content entirely (spec 07 §4.3). The
             // day-plan sync below deliberately ignores this filter: the

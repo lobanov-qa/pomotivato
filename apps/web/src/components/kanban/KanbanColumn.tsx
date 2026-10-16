@@ -1,6 +1,7 @@
 import { useDroppable } from "@dnd-kit/core";
 import type { ReactNode } from "react";
 import type { BoardColumn } from "../../features/kanban/board";
+import { useNumberPop } from "../../lib/useNumberPop";
 import { cn } from "../../lib/utils";
 
 const COLUMN_ACCENT: Record<BoardColumn, string> = {
@@ -23,6 +24,8 @@ interface Props {
 
 export function KanbanColumn({ column, title, count, canReceive, hint, children }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: column });
+  // Д4: the counter pops when it changes; the class is inert in minimal.
+  const countRef = useNumberPop<HTMLSpanElement>(count);
   return (
     <section
       ref={setNodeRef}
@@ -42,7 +45,9 @@ export function KanbanColumn({ column, title, count, canReceive, hint, children 
         >
           {title}
         </h2>
-        <span className="ml-auto text-xs tabular-nums text-muted-foreground">{count}</span>
+        <span className="ml-auto text-xs tabular-nums text-muted-foreground" ref={countRef}>
+          {count}
+        </span>
       </header>
       <div className="flex flex-col gap-2 overflow-y-auto p-2">{children}</div>
     </section>
